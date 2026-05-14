@@ -1,11 +1,12 @@
-import pytest
-import sys
 import os
-import tempfile
 import sqlite3
+import sys
+import tempfile
 import uuid
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 sys.path.insert(0, '/workspace')
 
@@ -14,12 +15,12 @@ os.environ['TESTING'] = 'true'
 
 with patch('flask.Flask.run'):
     import web_app as web_app_module
-    
+
     web_app_module.app.config['TESTING'] = True
     web_app_module.app.config['WTF_CSRF_ENABLED'] = False
     web_app_module.app.config['SECRET_KEY'] = 'test-secret-key-for-testing'
     web_app_module.app.config['DEBUG'] = False
-    
+
     test_app = web_app_module.app
 
 
@@ -120,7 +121,7 @@ def app_context(app):
 def demo_user(db):
     """Create a demo user for testing"""
     import bcrypt
-    from auth import auth_service
+
 
     user_id = str(uuid.uuid4())
     email = 'demo@example.com'
@@ -176,7 +177,7 @@ def mock_mcp_tool():
 def mock_database():
     """Mock database operations"""
     from contextlib import contextmanager
-    
+
     @contextmanager
     def _mock():
         with patch('web_app._get_db_connection') as mock:

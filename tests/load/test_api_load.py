@@ -5,18 +5,15 @@ Tests concurrent API requests, rate limiting behavior, and multiple users simula
 Run with: pytest tests/load/test_api_load.py -v
 """
 
-import asyncio
 import concurrent.futures
 import random
-import time
-from typing import List, Dict, Any, Optional
-from dataclasses import dataclass, field
-from statistics import mean, median, stdev
 import threading
+import time
+from dataclasses import dataclass, field
+from statistics import mean, median
+
 import httpx
-
 import pytest
-
 
 BASE_URL = "http://localhost:5000"
 TIMEOUT = 30.0
@@ -29,7 +26,7 @@ class RequestResult:
     status_code: int
     response_time_ms: float
     success: bool
-    error: Optional[str] = None
+    error: str | None = None
     timestamp: float = field(default_factory=time.time)
 
 
@@ -39,8 +36,8 @@ class LoadTestResults:
     total_requests: int
     successful_requests: int
     failed_requests: int
-    response_times: List[float]
-    status_codes: Dict[int, int]
+    response_times: list[float]
+    status_codes: dict[int, int]
     duration_seconds: float
 
     @property
@@ -119,7 +116,7 @@ class HTTPClient:
                 status_code=0,
                 response_time_ms=response_time,
                 success=False,
-                error=f"Timeout: {str(e)}"
+                error=f"Timeout: {e!s}"
             )
         except httpx.HTTPStatusError as e:
             response_time = (time.time() - start_time) * 1000
@@ -148,7 +145,7 @@ def run_concurrent_requests(
     max_workers: int = 10
 ) -> LoadTestResults:
     """Run concurrent requests to an endpoint."""
-    results: List[RequestResult] = []
+    results: list[RequestResult] = []
     start_time = time.time()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -170,12 +167,12 @@ def run_concurrent_requests(
 
 def run_mixed_requests(
     client: HTTPClient,
-    endpoints: List[str],
+    endpoints: list[str],
     num_requests: int,
     max_workers: int = 10
 ) -> LoadTestResults:
     """Run concurrent requests to multiple endpoints."""
-    results: List[RequestResult] = []
+    results: list[RequestResult] = []
     start_time = time.time()
 
     def get_random_endpoint():
@@ -200,13 +197,13 @@ def run_mixed_requests(
 
 def simulate_user_sessions(
     client: HTTPClient,
-    endpoints: List[str],
+    endpoints: list[str],
     num_users: int,
     requests_per_user: int,
     delay_range: tuple = (0.1, 0.5)
 ) -> LoadTestResults:
     """Simulate multiple users making sequential requests."""
-    results: List[RequestResult] = []
+    results: list[RequestResult] = []
     start_time = time.time()
     lock = threading.Lock()
 
@@ -251,7 +248,7 @@ class TestHealthEndpoint:
         client = HTTPClient(BASE_URL, TIMEOUT)
         results = run_concurrent_requests(client, "/api/health", num_requests=50, max_workers=10)
 
-        print(f"\n--- Health Endpoint Concurrent Test ---")
+        print("\n--- Health Endpoint Concurrent Test ---")
         print(f"Total requests: {results.total_requests}")
         print(f"Success rate: {results.success_rate:.1f}%")
         print(f"Avg response time: {results.avg_response_time:.2f}ms")
@@ -292,7 +289,7 @@ class TestAPIEndpoints:
             max_workers=20
         )
 
-        print(f"\n--- Mixed API Endpoints Test ---")
+        print("\n--- Mixed API Endpoints Test ---")
         print(f"Total requests: {results.total_requests}")
         print(f"Success rate: {results.success_rate:.1f}%")
         print(f"Avg response time: {results.avg_response_time:.2f}ms")
@@ -310,7 +307,7 @@ class TestRateLimiting:
         client = HTTPClient(BASE_URL, TIMEOUT)
         results = run_concurrent_requests(client, "/api/health", num_requests=200, max_workers=50)
 
-        print(f"\n--- Rate Limiting Test ---")
+        print("\n--- Rate Limiting Test ---")
         print(f"Total requests: {results.total_requests}")
         print(f"Status codes: {results.status_codes}")
         print(f"Success rate: {results.success_rate:.1f}%")
@@ -331,7 +328,7 @@ class TestRateLimiting:
             max_workers=25
         )
 
-        print(f"\n--- Sustained Load Test ---")
+        print("\n--- Sustained Load Test ---")
         print(f"Duration: {results.duration_seconds:.2f}s")
         print(f"Total requests: {results.total_requests}")
         print(f"Success rate: {results.success_rate:.1f}%")
@@ -361,7 +358,7 @@ class TestMultipleUsers:
             delay_range=(0.5, 1.5)
         )
 
-        print(f"\n--- Light Load Test (10 users) ---")
+        print("\n--- Light Load Test (10 users) ---")
         print(f"Total requests: {results.total_requests}")
         print(f"Success rate: {results.success_rate:.1f}%")
         print(f"Avg response time: {results.avg_response_time:.2f}ms")
@@ -387,7 +384,7 @@ class TestMultipleUsers:
             delay_range=(0.2, 0.8)
         )
 
-        print(f"\n--- Medium Load Test (50 users) ---")
+        print("\n--- Medium Load Test (50 users) ---")
         print(f"Total requests: {results.total_requests}")
         print(f"Success rate: {results.success_rate:.1f}%")
         print(f"Avg response time: {results.avg_response_time:.2f}ms")
@@ -415,7 +412,7 @@ class TestMultipleUsers:
             delay_range=(0.1, 0.5)
         )
 
-        print(f"\n--- Heavy Load Test (100 users) ---")
+        print("\n--- Heavy Load Test (100 users) ---")
         print(f"Total requests: {results.total_requests}")
         print(f"Success rate: {results.success_rate:.1f}%")
         print(f"Avg response time: {results.avg_response_time:.2f}ms")
@@ -438,7 +435,7 @@ class TestPerformanceMetrics:
 
         results = run_mixed_requests(client, endpoints, num_requests=100, max_workers=20)
 
-        print(f"\n--- Performance Thresholds ---")
+        print("\n--- Performance Thresholds ---")
         print(f"Min response time: {results.min_response_time:.2f}ms")
         print(f"Avg response time: {results.avg_response_time:.2f}ms")
         print(f"Median response time: {results.median_response_time:.2f}ms")
@@ -456,7 +453,7 @@ class TestPerformanceMetrics:
 
         results = run_mixed_requests(client, endpoints, num_requests=200, max_workers=50)
 
-        print(f"\n--- Throughput Test ---")
+        print("\n--- Throughput Test ---")
         print(f"Duration: {results.duration_seconds:.2f}s")
         print(f"Total requests: {results.total_requests}")
         print(f"Requests/sec: {results.requests_per_second:.2f}")
@@ -495,7 +492,7 @@ class TestErrorHandling:
         results = run_concurrent_requests(client, endpoint, num_requests=20, max_workers=5)
         concurrent_time = results.duration_seconds
 
-        print(f"\n--- Sequential vs Concurrent ---")
+        print("\n--- Sequential vs Concurrent ---")
         print(f"Sequential time: {sequential_time:.2f}s")
         print(f"Concurrent time: {concurrent_time:.2f}s")
         print(f"Speedup: {sequential_time / concurrent_time:.2f}x")

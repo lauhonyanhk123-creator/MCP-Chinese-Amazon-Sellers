@@ -1,14 +1,14 @@
 """
 Audit Logging Module - Track all user actions and system changes
 """
-import sqlite3
-import json
 import csv
+import json
+import sqlite3
 import uuid
-from datetime import datetime, timedelta, date
-from pathlib import Path
-from typing import List, Dict, Any, Optional
+from datetime import datetime, timedelta
 from enum import Enum
+from pathlib import Path
+from typing import Any
 
 DB_PATH = Path(__file__).parent / "seller_data.db"
 
@@ -63,10 +63,10 @@ class AuditLogger:
         user_id: str,
         action: str,
         resource_type: str,
-        resource_id: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None
+        resource_id: str | None = None,
+        details: dict[str, Any] | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None
     ) -> str:
         """
         Log an action to the audit log.
@@ -106,15 +106,15 @@ class AuditLogger:
 
     @staticmethod
     def get_logs(
-        user_id: Optional[str] = None,
-        action: Optional[str] = None,
-        resource_type: Optional[str] = None,
-        resource_id: Optional[str] = None,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
+        user_id: str | None = None,
+        action: str | None = None,
+        resource_type: str | None = None,
+        resource_id: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
         limit: int = 100,
         offset: int = 0
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get audit logs with optional filters.
 
@@ -187,11 +187,11 @@ class AuditLogger:
 
     @staticmethod
     def get_log_count(
-        user_id: Optional[str] = None,
-        action: Optional[str] = None,
-        resource_type: Optional[str] = None,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        user_id: str | None = None,
+        action: str | None = None,
+        resource_type: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None
     ) -> int:
         """Get total count of logs matching filters"""
         conn = AuditLogger._get_connection()
@@ -229,7 +229,7 @@ class AuditLogger:
         return result['count'] if result else 0
 
     @staticmethod
-    def get_user_activity(user_id: str, days: int = 30) -> Dict[str, Any]:
+    def get_user_activity(user_id: str, days: int = 30) -> dict[str, Any]:
         """
         Get activity summary for a specific user.
 
@@ -303,7 +303,7 @@ class AuditLogger:
         resource_type: str,
         resource_id: str,
         limit: int = 50
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get the change history for a specific resource.
 
@@ -344,11 +344,11 @@ class AuditLogger:
     @staticmethod
     def export_logs(
         format: str = 'csv',
-        user_id: Optional[str] = None,
-        action: Optional[str] = None,
-        resource_type: Optional[str] = None,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        user_id: str | None = None,
+        action: str | None = None,
+        resource_type: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None
     ) -> str:
         """
         Export audit logs to CSV or JSON format.
@@ -394,7 +394,7 @@ class AuditLogger:
         return filename
 
     @staticmethod
-    def get_action_statistics(days: int = 30) -> Dict[str, Any]:
+    def get_action_statistics(days: int = 30) -> dict[str, Any]:
         """
         Get statistics about actions over a period.
 
@@ -480,7 +480,7 @@ class AuditLogger:
         return deleted_count
 
     @staticmethod
-    def get_recent_logs(limit: int = 20) -> List[Dict[str, Any]]:
+    def get_recent_logs(limit: int = 20) -> list[dict[str, Any]]:
         """
         Get recent audit logs.
 

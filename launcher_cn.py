@@ -4,10 +4,11 @@
 Cross-Border Seller MCP Server - Chinese Launcher
 """
 
-import sys
 import os
 import subprocess
+import sys
 from pathlib import Path
+
 
 def print_banner():
     print("╔══════════════════════════════════════════════════════════════╗")
@@ -21,15 +22,15 @@ def check_env_file():
     env_file = Path(".env")
     env_cn_example = Path(".env.cn.example")
     env_example = Path(".env.example")
-    
+
     if not env_file.exists():
         print("⚠️  警告: .env 文件不存在!")
         print()
-        
+
         if env_cn_example.exists():
             print("📝 找到中文配置模板 (.env.cn.example)")
             choice = input("是否复制模板为 .env? (y/n, 默认 y): ").strip().lower()
-            
+
             if choice in ("y", "yes", ""):
                 import shutil
                 shutil.copy(env_cn_example, ".env")
@@ -41,7 +42,7 @@ def check_env_file():
         elif env_example.exists():
             print("📝 找到英文配置模板 (.env.example)")
             choice = input("是否复制模板为 .env? (y/n, 默认 y): ").strip().lower()
-            
+
             if choice in ("y", "yes", ""):
                 import shutil
                 shutil.copy(env_example, ".env")
@@ -58,11 +59,11 @@ def check_dependencies():
     """检查依赖是否已安装"""
     print()
     print("📦 检查依赖...")
-    
+
     try:
-        import mcp
-        import httpx
         import dotenv
+        import httpx
+        import mcp
         import pydantic
         print("✅ 所有依赖已安装")
         return True
@@ -70,7 +71,7 @@ def check_dependencies():
         print(f"⚠️  缺少依赖: {e}")
         print()
         choice = input("是否自动安装依赖? (y/n, 默认 y): ").strip().lower()
-        
+
         if choice in ("y", "yes", ""):
             print()
             print("正在安装依赖...")
@@ -86,7 +87,7 @@ def run_tests():
     """运行测试"""
     print()
     choice = input("是否运行测试确认环境正常? (y/n, 默认 n): ").strip().lower()
-    
+
     if choice in ("y", "yes"):
         print()
         print("🧪 运行测试...")
@@ -100,7 +101,7 @@ def show_license_info():
     from dotenv import load_dotenv
     load_dotenv()
     license_key = os.getenv("LICENSE_KEY", "")
-    
+
     print()
     print("📜 许可证信息:")
     if license_key == "FREE_DEMO_12345":
@@ -117,7 +118,7 @@ def show_license_info():
     elif not license_key:
         print("   当前: 免费版 (Free, 未设置)")
     else:
-        print(f"   当前: 自定义密钥")
+        print("   当前: 自定义密钥")
     print()
     print("   价格方案查看: PRICING_GUIDE_CN.md")
 
@@ -134,22 +135,22 @@ def show_menu():
 
 def main():
     print_banner()
-    
+
     os.chdir(Path(__file__).parent)
-    
+
     # 检查环境
     env_ok = check_env_file()
     dep_ok = check_dependencies()
-    
+
     if not (env_ok and dep_ok):
         print()
         print("请先完成配置后重新运行此脚本")
         return 1
-    
+
     while True:
         show_menu()
         choice = input("请输入选项 (1-5): ").strip()
-        
+
         if choice == "1":
             print()
             print("🚀 启动 MCP 服务器...")

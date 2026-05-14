@@ -12,8 +12,8 @@ Load Test Scenarios:
 
 import random
 import time
-from locust import HttpUser, task, between, events, stats
-from locust.runners import MasterRunner, WorkerRunner
+
+from locust import HttpUser, between, events, stats, task
 
 
 class WebUser(HttpUser):
@@ -260,7 +260,7 @@ def on_request_failure(request_type, name, response_time, response_length, excep
 def on_request(request_type, name, response_time, response_length, exception, **kwargs):
     """Log all requests for debugging."""
     if exception:
-        print(f"REQUEST FAILED: {name} - {str(exception)}")
+        print(f"REQUEST FAILED: {name} - {exception!s}")
 
 
 @events.quitting.add_listener

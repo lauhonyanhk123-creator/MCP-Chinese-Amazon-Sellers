@@ -10,13 +10,11 @@ This module provides intelligent pricing recommendations based on:
 """
 
 import os
-import json
-import math
-from typing import List, Dict, Any, Optional, Tuple
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
+from typing import Any
 
-from database import get_product_profile, get_all_product_profiles
+from database import get_product_profile
 
 
 @dataclass
@@ -24,7 +22,7 @@ class CompetitorData:
     asin: str
     title: str
     price: float
-    rating: Optional[float]
+    rating: float | None
     review_count: int
     seller: str
 
@@ -43,9 +41,9 @@ class PriceRecommendation:
     asin: str
     current_price: float
     cost_usd: float
-    competitor_analysis: Dict[str, Any]
+    competitor_analysis: dict[str, Any]
     optimal_price: float
-    price_range: Dict[str, float]
+    price_range: dict[str, float]
     recommended_price: float
     strategy: str
     target_margin: float
@@ -84,7 +82,7 @@ class PriceOptimizer:
     def get_exchange_rate(self) -> float:
         return self.default_exchange_rate
 
-    def analyze_competition(self, asin: str, limit: int = 10) -> Dict[str, Any]:
+    def analyze_competition(self, asin: str, limit: int = 10) -> dict[str, Any]:
         """
         Analyze competitor prices for a given ASIN or keyword.
 
@@ -139,7 +137,7 @@ class PriceOptimizer:
             "analyzed_at": datetime.now().isoformat()
         }
 
-    def _fetch_competitor_data(self, asin: str, limit: int) -> List[CompetitorData]:
+    def _fetch_competitor_data(self, asin: str, limit: int) -> list[CompetitorData]:
         """
         Fetch competitor data from Amazon catalog.
         In production, this would call the Amazon API.
@@ -157,7 +155,7 @@ class PriceOptimizer:
         ]
         return mock_competitors
 
-    def _calculate_median(self, prices: List[float]) -> float:
+    def _calculate_median(self, prices: list[float]) -> float:
         """Calculate median price from list."""
         sorted_prices = sorted(prices)
         n = len(sorted_prices)
@@ -167,7 +165,7 @@ class PriceOptimizer:
             return (sorted_prices[n // 2 - 1] + sorted_prices[n // 2]) / 2
         return sorted_prices[n // 2]
 
-    def _analyze_price_distribution(self, competitors: List[CompetitorData]) -> Dict[str, Any]:
+    def _analyze_price_distribution(self, competitors: list[CompetitorData]) -> dict[str, Any]:
         """Analyze the distribution of competitor prices."""
         prices = [c.price for c in competitors if c.price > 0]
         if not prices:
@@ -192,7 +190,7 @@ class PriceOptimizer:
             "high_segment_count": sum(1 for p in prices if p > max(prices) * 0.9)
         }
 
-    def _determine_market_position(self, min_price: float, max_price: float, avg_price: float) -> Dict[str, Any]:
+    def _determine_market_position(self, min_price: float, max_price: float, avg_price: float) -> dict[str, Any]:
         """Determine the market position relative to competitors."""
         mid_point = (min_price + max_price) / 2
 
@@ -216,10 +214,10 @@ class PriceOptimizer:
     def calculate_optimal_price(
         self,
         cost: float,
-        competitor_prices: List[float],
+        competitor_prices: list[float],
         target_margin: float,
         strategy: str = "balanced"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Calculate optimal price based on cost, competition, and strategy.
 
@@ -301,8 +299,8 @@ class PriceOptimizer:
         self,
         sku: str,
         strategy: str = "balanced",
-        custom_cost: Optional[float] = None,
-        target_margin: Optional[float] = None
+        custom_cost: float | None = None,
+        target_margin: float | None = None
     ) -> PriceRecommendation:
         """
         Get comprehensive price recommendation for a SKU.
@@ -374,8 +372,8 @@ class PriceOptimizer:
 
     def _calculate_recommendation_confidence(
         self,
-        competitor_analysis: Dict[str, Any],
-        price_calc: Dict[str, Any],
+        competitor_analysis: dict[str, Any],
+        price_calc: dict[str, Any],
         target_margin: float
     ) -> float:
         """Calculate confidence score for the recommendation."""
@@ -399,8 +397,8 @@ class PriceOptimizer:
         self,
         demand: float,
         elasticity: float = -1.5,
-        current_price: Optional[float] = None
-    ) -> Dict[str, Any]:
+        current_price: float | None = None
+    ) -> dict[str, Any]:
         """
         Analyze price sensitivity and demand elasticity.
 
@@ -466,7 +464,7 @@ class PriceOptimizer:
         self,
         elasticity: float,
         demand: float
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate recommendations based on elasticity."""
         recommendations = []
 
@@ -491,9 +489,9 @@ class PriceOptimizer:
     def detect_competitive_threats(
         self,
         asin: str,
-        current_price: Optional[float] = None,
+        current_price: float | None = None,
         threshold_percent: float = 15.0
-    ) -> List[CompetitiveThreat]:
+    ) -> list[CompetitiveThreat]:
         """
         Detect competitive threats from low-priced competitors.
 
@@ -555,9 +553,9 @@ class PriceOptimizer:
 
     def calculate_multi_sku_recommendations(
         self,
-        skus: List[str],
+        skus: list[str],
         strategy: str = "balanced"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Calculate price recommendations for multiple SKUs.
 
@@ -595,18 +593,18 @@ class PriceOptimizer:
 optimizer = PriceOptimizer()
 
 
-def get_price_recommendation(sku: str, strategy: str = "balanced") -> Dict[str, Any]:
+def get_price_recommendation(sku: str, strategy: str = "balanced") -> dict[str, Any]:
     """Convenience function for getting price recommendation."""
     rec = optimizer.get_price_recommendation(sku, strategy=strategy)
     return asdict(rec)
 
 
-def analyze_competitor_prices(asin: str, limit: int = 10) -> Dict[str, Any]:
+def analyze_competitor_prices(asin: str, limit: int = 10) -> dict[str, Any]:
     """Convenience function for competitor analysis."""
     return optimizer.analyze_competition(asin, limit=limit)
 
 
-def detect_threats(asin: str, current_price: Optional[float] = None) -> List[Dict[str, Any]]:
+def detect_threats(asin: str, current_price: float | None = None) -> list[dict[str, Any]]:
     """Convenience function for threat detection."""
     threats = optimizer.detect_competitive_threats(asin, current_price=current_price)
     return [asdict(t) for t in threats]

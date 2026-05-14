@@ -12,40 +12,147 @@ REST API Endpoints:
     - POST /api/tools/<name>   - Call specific MCP tool with parameters
 """
 
-from flask import Flask, render_template, request, jsonify, Response, redirect, url_for, flash, g, make_response, session
-import json
-import io
-import csv
 import asyncio
+import csv
+import hashlib
+import io
+import json
 import math
-from datetime import datetime, timedelta
 import os
-import threading
-import uuid
 import random
 import secrets
-from dotenv import load_dotenv
-from typing import Any, Callable, Optional, List, Dict
-from functools import wraps
+import threading
 import traceback
+import uuid
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
+from typing import Any
+
+from dotenv import load_dotenv
 from flasgger import Swagger
+from flask import (
+    Flask,
+    Response,
+    flash,
+    g,
+    jsonify,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
+from flask_compress import Compress
 
 load_dotenv()
 
+from audit import AuditAction, AuditLogger, ResourceType
 from auth import (
-    auth_service, audit_logger,
-    PERMISSIONS, PERMISSION_HIERARCHY,
-    get_user_permissions, check_permission, has_minimum_role,
-    permission_required, role_required, login_required,
-    create_api_key_for_user, list_user_api_keys, revoke_user_api_key
+    PERMISSIONS,
+    audit_logger,
+    auth_service,
+    create_api_key_for_user,
+    get_user_permissions,
+    list_user_api_keys,
+    login_required,
+    permission_required,
+    revoke_user_api_key,
+    role_required,
 )
-from license_manager import get_license_manager, LicenseTier
-from notification import get_notification_service, NotificationPreference, NotificationTemplates
-from rate_limiter import rate_limit, add_rate_limit_headers, get_rate_limiter
-from audit import AuditLogger, AuditAction, ResourceType
+from notification import NotificationPreference, NotificationTemplates, get_notification_service
+from rate_limiter import get_rate_limiter, rate_limit
+from cache import CacheManager, cached
 
-def generate_date_range(days: int) -> List[str]:
+cache_manager = CacheManager()
+
+
+class AsyncRunner:
+    """Helper class to run async coroutines from sync context"""
+    _loop = None
+    _thread = None
+
+    @classmethod
+    def run_async(cls, coro):
+        """Run an async coroutine and return its result"""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
+
+_process_start_time = datetime.now()
+_request_counter = 0
+_request_counter_lock = threading.Lock()
+_endpoint_timings = {}
+_endpoint_timings_lock = threading.Lock()
+
+_redis_pool = None
+
+def get_redis_pool():
+    """Get or create Redis connection pool for connection reuse."""
+    global _redis_pool
+    if _redis_pool is None:
+        import redis
+        redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379')
+        _redis_pool = redis.ConnectionPool.from_url(
+            redis_url,
+            max_connections=50,
+            decode_responses=True
+        )
+    return _redis_pool
+
+
+def get_uptime():
+    """Get uptime statistics"""
+    global _request_counter
+    current_time = datetime.now()
+    uptime_seconds = (current_time - _process_start_time).total_seconds()
+    
+    return {
+        'start_time': _process_start_time.isoformat(),
+        'uptime_seconds': uptime_seconds,
+        'total_requests': _request_counter
+    }
+
+
+def track_request_time(f):
+    """Decorator to track endpoint response times"""
+    from functools import wraps
+    import time
+    
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        global _endpoint_timings, _request_counter
+        
+        with _request_counter_lock:
+            _request_counter += 1
+        
+        start_time = time.time()
+        result = f(*args, **kwargs)
+        elapsed = time.time() - start_time
+        
+        endpoint_name = f.__name__
+        with _endpoint_timings_lock:
+            if endpoint_name not in _endpoint_timings:
+                _endpoint_timings[endpoint_name] = []
+            _endpoint_timings[endpoint_name].append({
+                'timestamp': datetime.now().isoformat(),
+                'duration_ms': round(elapsed * 1000, 2)
+            })
+            if len(_endpoint_timings[endpoint_name]) > 100:
+                _endpoint_timings[endpoint_name] = _endpoint_timings[endpoint_name][-100:]
+        
+        return result
+    
+    return decorated_function
+
+
+
+def generate_date_range(days: int) -> list[str]:
     """Generate a list of date strings for the past N days"""
     return [(datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d') for i in range(days)]
 
@@ -74,9 +181,29 @@ def log_audit(user_id, action, resource_type, resource_id=None, details=None):
         user_agent=user_agent
     )
 
+def generate_etag(data: Any) -> str:
+    """Generate ETag from data using MD5 hash"""
+    data_str = json.dumps(data, sort_keys=True, default=str)
+    hash_value = hashlib.md5(data_str.encode()).hexdigest()
+    return f'"{hash_value}"'
+
+def add_etag_and_cache(response: Response, max_age: int = 60) -> Response:
+    """Add ETag and Cache-Control headers to response"""
+    response.headers['Cache-Control'] = f'public, max-age={max_age}'
+    return response
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 app.jinja_env.filters['format_currency'] = format_currency_filter
+
+@app.after_request
+def add_security_headers(response):
+    """Add security headers to all responses"""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
 
 SWAGGER_CONFIG = {
     'title': 'Cross-Border Seller API',
@@ -111,13 +238,15 @@ SWAGGER_CONFIG = {
 
 swagger = Swagger(app, config=SWAGGER_CONFIG)
 
+Compress(app)
+
 @app.context_processor
 def inject_user_session():
     """Inject user session info into all templates"""
     session_id = request.cookies.get('session_id')
     user_email = None
     user_role = None
-    
+
     if session_id:
         session = auth_service.get_session(session_id)
         if session:
@@ -127,7 +256,7 @@ def inject_user_session():
                 if user:
                     user_email = user['email']
                     user_role = user['role']
-    
+
     return {
         'session_id': session_id,
         'user_email': user_email,
@@ -158,7 +287,7 @@ def health_check():
         else:
             health_status['checks']['database'] = 'not_initialized'
     except Exception as e:
-        health_status['checks']['database'] = f'error: {str(e)}'
+        health_status['checks']['database'] = f'error: {e!s}'
         health_status['status'] = 'degraded'
 
     try:
@@ -168,11 +297,43 @@ def health_check():
         r.ping()
         health_status['checks']['redis'] = 'ok'
     except Exception as e:
-        health_status['checks']['redis'] = f'unavailable: {str(e)}'
+        health_status['checks']['redis'] = f'unavailable: {e!s}'
         health_status['status'] = 'degraded'
 
     status_code = 200 if health_status['status'] == 'healthy' else 503
     return jsonify(health_status), status_code
+
+
+@app.route('/api/performance')
+@app.route('/api/metrics')
+@login_required
+def performance_metrics():
+    """Return performance metrics for monitoring"""
+    lang = request.args.get('lang', 'en')
+    
+    with _endpoint_timings_lock:
+        timings_summary = {}
+        for endpoint, records in _endpoint_timings.items():
+            if records:
+                durations = [r['duration_ms'] for r in records]
+                timings_summary[endpoint] = {
+                    'count': len(durations),
+                    'avg_ms': round(sum(durations) / len(durations), 2),
+                    'min_ms': round(min(durations), 2),
+                    'max_ms': round(max(durations), 2)
+                }
+    
+    metrics = {
+        'cache': cache_manager.get_stats(),
+        'database': {
+            'status': 'ok'
+        },
+        'uptime': get_uptime(),
+        'endpoint_timings': timings_summary
+    }
+    
+    return jsonify(metrics)
+
 
 TEXT = {
     'cn': {
@@ -1497,49 +1658,49 @@ def login():
         email = request.form.get('email')
         password = request.form.get('password')
         remember_me = request.form.get('remember_me') == 'on'
-        
+
         if not email or not password:
             flash(get_text(lang, 'email_required') + ' ' + get_text(lang, 'password_required'), 'error')
             return render_template('login.html', lang=lang, get_text=lambda key: get_text(lang, key))
-        
+
         user = auth_service.authenticate_user(email, password)
         if user:
             token = auth_service.generate_token(user['user_id'], remember_me)
             session_id = auth_service.create_session(
-                user['user_id'], 
+                user['user_id'],
                 token,
                 ip_address=request.remote_addr,
                 user_agent=request.headers.get('User-Agent')
             )
-            
+
             audit_logger.log('login', user['user_id'], {'email': email})
-            
+
             response = make_response(redirect(request.args.get('next') or url_for('index')))
             response.set_cookie('session_id', session_id, max_age=720*3600 if remember_me else 24*3600)
             response.set_cookie('auth_token', token, max_age=720*3600 if remember_me else 24*3600)
-            
+
             flash(get_text(lang, 'login_success'), 'success')
             return response
         else:
             flash(get_text(lang, 'invalid_credentials'), 'error')
-    
+
     return render_template('login.html', lang=lang, get_text=lambda key: get_text(lang, key))
 
 @app.route('/logout')
 def logout():
     lang = request.args.get('lang', 'cn')
     session_id = request.cookies.get('session_id')
-    
+
     if session_id:
         session = auth_service.get_session(session_id)
         if session:
             auth_service.delete_session(session_id)
             audit_logger.log('logout', session['user_id'], {})
-    
+
     response = make_response(redirect(url_for('login')))
     response.delete_cookie('session_id')
     response.delete_cookie('auth_token')
-    
+
     flash(get_text(lang, 'logout_success'), 'success')
     return response
 
@@ -1552,28 +1713,28 @@ def register():
         confirm_password = request.form.get('confirm_password')
         role = request.form.get('role', 'viewer')
         terms_accepted = request.form.get('terms') == 'on'
-        
+
         if not email or not password:
             flash(get_text(lang, 'email_required') + ' ' + get_text(lang, 'password_required'), 'error')
             return render_template('register.html', lang=lang, get_text=lambda key: get_text(lang, key))
-        
+
         if password != confirm_password:
             flash(get_text(lang, 'password_mismatch'), 'error')
             return render_template('register.html', lang=lang, get_text=lambda key: get_text(lang, key))
-        
+
         if len(password) < 8:
             flash(get_text(lang, 'password_too_short'), 'error')
             return render_template('register.html', lang=lang, get_text=lambda key: get_text(lang, key))
-        
+
         result = auth_service.register_user(email, password, role)
-        
+
         if result.get('success'):
             audit_logger.log('register', result['user_id'], {'email': email, 'role': role})
             flash(get_text(lang, 'registration_success'), 'success')
             return redirect(url_for('login', lang=lang))
         else:
             flash(result.get('error', get_text(lang, 'registration_failed')), 'error')
-    
+
     return render_template('register.html', lang=lang, get_text=lambda key: get_text(lang, key))
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
@@ -1581,69 +1742,69 @@ def forgot_password():
     lang = request.args.get('lang', 'cn')
     if request.method == 'POST':
         email = request.form.get('email')
-        
+
         if not email:
             flash(get_text(lang, 'email_required'), 'error')
             return render_template('forgot_password.html', lang=lang, get_text=lambda key: get_text(lang, key))
-        
+
         result = auth_service.reset_password_request(email)
-        
+
         if result.get('success') and result.get('reset_token'):
             audit_logger.log('password_reset_request', None, {'email': email})
-        
+
         flash(get_text(lang, 'password_reset_sent'), 'success')
         return redirect(url_for('login', lang=lang))
-    
+
     return render_template('forgot_password.html', lang=lang, get_text=lambda key: get_text(lang, key))
 
 @app.route('/reset-password/<token>', methods=['GET', 'POST'])
 def reset_password(token):
     lang = request.args.get('lang', 'cn')
-    
+
     user_id = auth_service.verify_reset_token(token)
     if not user_id:
         flash(get_text(lang, 'invalid_reset_token'), 'error')
         return redirect(url_for('forgot_password', lang=lang))
-    
+
     if request.method == 'POST':
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
-        
+
         if password != confirm_password:
             flash(get_text(lang, 'password_mismatch'), 'error')
             return render_template('reset_password.html', lang=lang, token=token, get_text=lambda key: get_text(lang, key))
-        
+
         if len(password) < 8:
             flash(get_text(lang, 'password_too_short'), 'error')
             return render_template('reset_password.html', lang=lang, token=token, get_text=lambda key: get_text(lang, key))
-        
+
         result = auth_service.reset_password(token, password)
-        
+
         if result.get('success'):
             audit_logger.log('password_reset_complete', user_id, {})
             flash(get_text(lang, 'password_reset_success'), 'success')
             return redirect(url_for('login', lang=lang))
         else:
             flash(result.get('error', get_text(lang, 'invalid_reset_token')), 'error')
-    
+
     return render_template('reset_password.html', lang=lang, token=token, get_text=lambda key: get_text(lang, key))
 
 @app.route('/api/auth/login', methods=['POST'])
 def api_login():
     lang = request.args.get('lang', 'cn')
     data = request.get_json()
-    
+
     email = data.get('email')
     password = data.get('password')
     remember_me = data.get('remember_me', False)
-    
+
     if not email or not password:
         return jsonify({'error': get_text(lang, 'email_required') + ' ' + get_text(lang, 'password_required')}), 400
-    
+
     user = auth_service.authenticate_user(email, password)
     if not user:
         return jsonify({'error': get_text(lang, 'invalid_credentials')}), 401
-    
+
     token = auth_service.generate_token(user['user_id'], remember_me)
     session_id = auth_service.create_session(
         user['user_id'],
@@ -1651,9 +1812,9 @@ def api_login():
         ip_address=request.remote_addr,
         user_agent=request.headers.get('User-Agent')
     )
-    
+
     audit_logger.log('api_login', user['user_id'], {'email': email})
-    
+
     return jsonify({
         'success': True,
         'token': token,
@@ -1669,13 +1830,13 @@ def api_login():
 def api_logout():
     lang = request.args.get('lang', 'cn')
     session_id = request.cookies.get('session_id')
-    
+
     if session_id:
         session = auth_service.get_session(session_id)
         if session:
             auth_service.delete_session(session_id)
             audit_logger.log('api_logout', session['user_id'], {})
-    
+
     return jsonify({'success': True, 'message': get_text(lang, 'logout_success')})
 
 @app.route('/api/auth/me')
@@ -1683,7 +1844,7 @@ def api_me():
     lang = request.args.get('lang', 'cn')
     token = None
     session_id = request.cookies.get('session_id')
-    
+
     if 'Authorization' in request.headers:
         auth_header = request.headers['Authorization']
         try:
@@ -1692,23 +1853,23 @@ def api_me():
                 token = None
         except ValueError:
             token = None
-    
+
     if not token and session_id:
         session = auth_service.get_session(session_id)
         if session:
             token = session['token']
-    
+
     if not token:
         return jsonify({'error': get_text(lang, 'login_required')}), 401
-    
+
     payload = auth_service.verify_token(token)
     if not payload:
         return jsonify({'error': get_text(lang, 'session_expired')}), 401
-    
+
     user = auth_service.get_user(payload['user_id'])
     if not user:
         return jsonify({'error': get_text(lang, 'login_required')}), 401
-    
+
     return jsonify({
         'success': True,
         'user': {
@@ -1999,7 +2160,7 @@ def inventory():
             import json
             data = json.loads(result['data'])
             inventory_data = data.get('alerts', [])
-    except Exception as e:
+    except Exception:
         inventory_data = []
 
     return render_template('inventory.html',
@@ -2012,7 +2173,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
     """Call an MCP tool by name with parameters"""
     try:
         if tool_name == 'get_low_stock_alerts':
-            from server import GetLowStockAlertsInput, get_low_stock_alerts, ResponseFormat
+            from server import GetLowStockAlertsInput, ResponseFormat, get_low_stock_alerts
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = GetLowStockAlertsInput(
                 threshold=params.get('threshold'),
@@ -2023,7 +2184,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
             return {'success': True, 'data': result, 'tool': tool_name}
 
         elif tool_name == 'get_competitor_prices':
-            from server import GetCompetitorPricesInput, get_competitor_prices, ResponseFormat
+            from server import GetCompetitorPricesInput, ResponseFormat, get_competitor_prices
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = GetCompetitorPricesInput(
                 sku=params.get('sku'),
@@ -2034,7 +2195,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
             return {'success': True, 'data': result, 'tool': tool_name}
 
         elif tool_name == 'get_review_alerts':
-            from server import GetReviewAlertsInput, get_review_alerts, ResponseFormat
+            from server import GetReviewAlertsInput, ResponseFormat, get_review_alerts
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = GetReviewAlertsInput(
                 days=params.get('days', 7),
@@ -2045,7 +2206,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
             return {'success': True, 'data': result, 'tool': tool_name}
 
         elif tool_name == 'get_product_cost_1688':
-            from server import GetProductCost1688Input, get_product_cost_1688, ResponseFormat
+            from server import GetProductCost1688Input, ResponseFormat, get_product_cost_1688
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = GetProductCost1688Input(
                 sku=params.get('sku'),
@@ -2055,7 +2216,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
             return {'success': True, 'data': result, 'tool': tool_name}
 
         elif tool_name == 'calculate_amazon_price':
-            from server import CalculateAmazonPriceInput, calculate_amazon_price, ResponseFormat
+            from server import CalculateAmazonPriceInput, ResponseFormat, calculate_amazon_price
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = CalculateAmazonPriceInput(
                 sku=params.get('sku'),
@@ -2068,7 +2229,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
             return {'success': True, 'data': result, 'tool': tool_name}
 
         elif tool_name == 'sync_inventory':
-            from server import SyncInventoryInput, sync_inventory, ResponseFormat
+            from server import ResponseFormat, SyncInventoryInput, sync_inventory
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = SyncInventoryInput(
                 sku=params.get('sku'),
@@ -2078,7 +2239,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
             return {'success': True, 'data': result, 'tool': tool_name}
 
         elif tool_name == 'get_orders_amazon':
-            from server import GetOrdersAmazonInput, get_orders_amazon, ResponseFormat
+            from server import GetOrdersAmazonInput, ResponseFormat, get_orders_amazon
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = GetOrdersAmazonInput(
                 days=params.get('days', 7),
@@ -2090,7 +2251,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
             return {'success': True, 'data': result, 'tool': tool_name}
 
         elif tool_name == 'get_product_reviews':
-            from server import GetProductReviewsInput, get_product_reviews, ResponseFormat
+            from server import GetProductReviewsInput, ResponseFormat, get_product_reviews
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = GetProductReviewsInput(
                 sku=params.get('sku'),
@@ -2104,7 +2265,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
             return {'success': True, 'data': result, 'tool': tool_name}
 
         elif tool_name == 'get_negative_reviews':
-            from server import GetNegativeReviewsInput, get_negative_reviews, ResponseFormat
+            from server import GetNegativeReviewsInput, ResponseFormat, get_negative_reviews
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = GetNegativeReviewsInput(
                 sku=params.get('sku'),
@@ -2116,7 +2277,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
             return {'success': True, 'data': result, 'tool': tool_name}
 
         elif tool_name == 'sync_price':
-            from server import SyncPriceInput, sync_price, ResponseFormat
+            from server import ResponseFormat, SyncPriceInput, sync_price
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = SyncPriceInput(
                 sku=params.get('sku'),
@@ -2138,7 +2299,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
             return {'success': True, 'data': result, 'tool': tool_name}
 
         elif tool_name == 'get_inventory_1688':
-            from server import GetInventory1688Input, get_inventory_1688, ResponseFormat
+            from server import GetInventory1688Input, ResponseFormat, get_inventory_1688
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = GetInventory1688Input(
                 sku=params.get('sku'),
@@ -2148,7 +2309,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
             return {'success': True, 'data': result, 'tool': tool_name}
 
         elif tool_name == 'calculate_true_profit':
-            from server import CalculateTrueProfitInput, calculate_true_profit, ResponseFormat
+            from server import CalculateTrueProfitInput, ResponseFormat, calculate_true_profit
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = CalculateTrueProfitInput(
                 sku=params.get('sku'),
@@ -2169,7 +2330,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
             return {'success': True, 'data': result, 'tool': tool_name}
 
         elif tool_name == 'save_product_profile':
-            from server import SaveProductProfileInput, save_product_profile_tool, ResponseFormat
+            from server import ResponseFormat, SaveProductProfileInput, save_product_profile_tool
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = SaveProductProfileInput(
                 sku=params.get('sku'),
@@ -2191,7 +2352,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
             return {'success': True, 'data': result, 'tool': tool_name}
 
         elif tool_name == 'get_product_profile':
-            from server import GetProductProfileInput, get_product_profile_tool, ResponseFormat
+            from server import GetProductProfileInput, ResponseFormat, get_product_profile_tool
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = GetProductProfileInput(
                 sku=params.get('sku'),
@@ -2201,7 +2362,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
             return {'success': True, 'data': result, 'tool': tool_name}
 
         elif tool_name == 'list_all_products':
-            from server import GetStaleProductsInput, list_all_products, ResponseFormat
+            from server import GetStaleProductsInput, ResponseFormat, list_all_products
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = GetStaleProductsInput(
                 hours=params.get('hours', 24),
@@ -2211,7 +2372,7 @@ async def call_mcp_tool(tool_name: str, params: dict) -> dict:
             return {'success': True, 'data': result, 'tool': tool_name}
 
         elif tool_name == 'get_stale_products':
-            from server import GetStaleProductsInput, get_stale_products_tool, ResponseFormat
+            from server import GetStaleProductsInput, ResponseFormat, get_stale_products_tool
             response_format = ResponseFormat(params.get('response_format', 'json'))
             input_params = GetStaleProductsInput(
                 hours=params.get('hours', 24),
@@ -2250,27 +2411,27 @@ def index():
 def profit():
     """Profit Calculator page"""
     lang = request.args.get('lang', 'cn')
-    
+
     if request.method == 'POST':
         sku = request.form.get('sku', 'SKU-12345')
         selling_price = float(request.form.get('selling_price', 29.99))
         cost_cny = float(request.form.get('cost_cny', 35.0))
-        
+
         result = calculate_true_profit_simple(
             selling_price_usd=selling_price,
             cost_cny=cost_cny
         )
-        
-        return render_template('profit.html', 
-                             lang=lang, 
+
+        return render_template('profit.html',
+                             lang=lang,
                              get_text=lambda key: get_text(lang, key),
                              result=result,
                              sku=sku,
                              selling_price=selling_price,
                              request=request)
-    
-    return render_template('profit.html', 
-                         lang=lang, 
+
+    return render_template('profit.html',
+                         lang=lang,
                          get_text=lambda key: get_text(lang, key),
                          result=None,
                          request=request)
@@ -2279,7 +2440,7 @@ def calculate_true_profit_simple(selling_price_usd: float, cost_cny: float):
     """Simple version of true profit calculation for web UI"""
     exchange_rate = 7.2
     cost_usd = cost_cny / exchange_rate
-    
+
     shipping = 2.0
     referral_fee = selling_price_usd * 0.15
     fba_fee = 3.5
@@ -2289,14 +2450,14 @@ def calculate_true_profit_simple(selling_price_usd: float, cost_cny: float):
     returns = (cost_usd + shipping) * 0.05
     customs = cost_usd * 0.03
     overhead = selling_price_usd * 0.05
-    
-    total_cost = (cost_usd + shipping + referral_fee + fba_fee + storage + 
+
+    total_cost = (cost_usd + shipping + referral_fee + fba_fee + storage +
                  advertising + payment_fee + returns + customs + overhead)
-    
+
     net_profit = selling_price_usd - total_cost
     profit_margin = (net_profit / selling_price_usd * 100) if selling_price_usd > 0 else 0
     is_profitable = net_profit > 0
-    
+
     return {
         'selling_price_usd': selling_price_usd,
         'cost_cny': cost_cny,
@@ -2326,18 +2487,18 @@ def inventory_alerts():
     threshold = request.args.get('threshold', 10, type=int)
     platform = request.args.get('platform', 'all')
     risk_threshold = request.args.get('risk_threshold', 14, type=int)
-    
+
     platform_param = 'both' if platform == 'all' else platform
-    
+
     filtered_alerts = []
     predictions = []
     health_score = None
-    
+
     try:
         from analytics_engine import analyzer
-        
+
         risk_products = analyzer.identify_risk_products(threshold_days=risk_threshold)
-        
+
         for rp in risk_products:
             dos = analyzer.calculate_days_of_supply(rp['sku'])
             reorder = analyzer.calculate_reorder_quantity(
@@ -2357,39 +2518,39 @@ def inventory_alerts():
                 'reorder_urgency': reorder.get('urgency', 'none'),
                 'days_of_supply': dos.get('days_of_supply', float('inf'))
             })
-        
+
         health_score = analyzer.get_inventory_health_score()
-        
-    except Exception as e:
+
+    except Exception:
         predictions = []
-    
+
     try:
         result = AsyncRunner.run_async(call_mcp_tool('get_low_stock_alerts', {
             'threshold': threshold,
             'platform': platform_param,
             'response_format': 'json'
         }))
-        
+
         if result.get('success'):
             import json
             data = json.loads(result['data'])
             raw_alerts = data.get('alerts', [])
-            
+
             for alert in raw_alerts:
                 if 'error' in alert:
                     continue
-                
+
                 current_stock = alert.get('current_stock', 0)
                 alert_threshold = alert.get('threshold', threshold)
                 shortage = alert.get('shortage', alert_threshold - current_stock)
-                
+
                 if shortage >= 15:
                     severity = 'critical'
                 elif shortage >= 5:
                     severity = 'warning'
                 else:
                     severity = 'low'
-                
+
                 filtered_alerts.append({
                     'product_name': alert.get('product_name', 'Unknown'),
                     'sku': alert.get('sku', 'N/A'),
@@ -2399,23 +2560,23 @@ def inventory_alerts():
                     'shortage': shortage,
                     'severity': severity
                 })
-            
+
             filtered_alerts.sort(key=lambda x: (
                 0 if x['severity'] == 'critical' else 1 if x['severity'] == 'warning' else 2,
                 -x['shortage']
             ))
-            
-    except Exception as e:
+
+    except Exception:
         filtered_alerts = []
-    
+
     avg_days_supply = 0
     if predictions:
         finite_dos = [p['days_of_supply'] for p in predictions if p['days_of_supply'] != float('inf')]
         if finite_dos:
             avg_days_supply = sum(finite_dos) / len(finite_dos)
-    
-    return render_template('inventory.html', 
-                         lang=lang, 
+
+    return render_template('inventory.html',
+                         lang=lang,
                          get_text=lambda key: get_text(lang, key),
                          alerts=filtered_alerts,
                          predictions=predictions,
@@ -2431,12 +2592,12 @@ def inventory_alerts():
 def competitor():
     """Competitor Price Analysis page"""
     lang = request.args.get('lang', 'cn')
-    
+
     results = []
     search_term = request.args.get('asin_or_keyword', '')
     max_results = request.args.get('max_results', 5, type=int)
     price_range = None
-    
+
     if search_term:
         try:
             result = AsyncRunner.run_async(call_mcp_tool('get_competitor_prices', {
@@ -2444,18 +2605,18 @@ def competitor():
                 'limit': max_results,
                 'response_format': 'json'
             }))
-            
+
             if result.get('success'):
                 import json
                 data = json.loads(result['data'])
                 results = data.get('competitors', [])
                 if results and 'price_range' in data:
                     price_range = data['price_range']
-        except Exception as e:
+        except Exception:
             results = []
-    
-    return render_template('competitor.html', 
-                         lang=lang, 
+
+    return render_template('competitor.html',
+                         lang=lang,
                          get_text=lambda key: get_text(lang, key),
                          results=results,
                          search_term=search_term,
@@ -2487,7 +2648,7 @@ def price_optimizer():
                 asin_param,
                 current_price=recommendation.get('current_price') if recommendation else None
             )
-        except Exception as e:
+        except Exception:
             pass
 
     return render_template('price_optimizer.html',
@@ -2509,33 +2670,33 @@ def reviews():
     days_back = request.args.get('days_back', 7, type=int)
     rating_threshold = request.args.get('rating_threshold', 0, type=int)
     asin = request.args.get('asin', '')
-    
+
     alerts = []
     total_alerts = 0
     priority_breakdown = {'critical': 0, 'high': 0, 'medium': 0}
-    
+
     try:
         result = AsyncRunner.run_async(call_mcp_tool('get_review_alerts', {
             'days': days_back,
             'include_supplier_flags': True,
             'response_format': 'json'
         }))
-        
+
         if result.get('success'):
             import json
             data = json.loads(result['data'])
             alerts = data.get('alerts', [])
             total_alerts = data.get('total_alerts', 0)
             priority_breakdown = data.get('priority_breakdown', {'critical': 0, 'high': 0, 'medium': 0})
-            
+
             if rating_threshold > 0:
                 alerts = [a for a in alerts if a.get('rating', 5) <= rating_threshold]
                 total_alerts = len(alerts)
-    except Exception as e:
+    except Exception:
         alerts = []
-    
-    return render_template('reviews.html', 
-                         lang=lang, 
+
+    return render_template('reviews.html',
+                         lang=lang,
                          get_text=lambda key: get_text(lang, key),
                          alerts=alerts,
                          total_alerts=total_alerts,
@@ -2755,15 +2916,15 @@ def calculate_trend(current: float, previous: float, higher_is_good: bool = True
         if current == 0:
             return {'direction': 'stable', 'percentage': 0, 'is_positive': True}
         return {'direction': 'up', 'percentage': 100, 'is_positive': higher_is_good}
-    
+
     change_pct = ((current - previous) / previous) * 100
-    
+
     if abs(change_pct) < 5:
         return {'direction': 'stable', 'percentage': abs(round(change_pct, 1)), 'is_positive': True}
-    
+
     direction = 'up' if change_pct > 0 else 'down'
     is_positive = (change_pct > 0) == higher_is_good
-    
+
     return {
         'direction': direction,
         'percentage': abs(round(change_pct, 1)),
@@ -3182,13 +3343,13 @@ def api_list_tools():
                     description: Detailed schema for all parameters
     """
     lang = request.args.get('lang', 'en')
-    
+
     tools_list = []
     for name, tool in TOOL_REGISTRY.items():
         params = tool['params_schema']
         required = [p for p, v in params.items() if v.get('required', False)]
         optional = [p for p, v in params.items() if not v.get('required', False)]
-        
+
         tools_list.append({
             'name': name,
             'description': tool['description'],
@@ -3196,13 +3357,21 @@ def api_list_tools():
             'optional_parameters': optional,
             'parameter_details': params
         })
-    
-    return jsonify({
+
+    response_data = {
         'success': True,
         'message': get_text(lang, 'api_tools_list'),
         'total_tools': len(tools_list),
         'tools': tools_list
-    })
+    }
+
+    etag = generate_etag(response_data)
+    if request.headers.get('If-None-Match') == etag:
+        return '', 304
+
+    response = make_response(jsonify(response_data))
+    response.headers['ETag'] = etag
+    return add_etag_and_cache(response, max_age=300)
 
 @app.route('/api/tools/<tool_name>', methods=['GET'])
 def api_get_tool_info(tool_name: str):
@@ -3266,20 +3435,20 @@ def api_get_tool_info(tool_name: str):
               type: string
     """
     lang = request.args.get('lang', 'en')
-    
+
     if tool_name not in TOOL_REGISTRY:
         return jsonify({
             'success': False,
             'error': get_text(lang, 'api_error_tool_not_found'),
             'message': f'Tool "{tool_name}" not found'
         }), 404
-    
+
     tool = TOOL_REGISTRY[tool_name]
     params = tool['params_schema']
     required = [p for p, v in params.items() if v.get('required', False)]
     optional = [p for p, v in params.items() if not v.get('required', False)]
-    
-    return jsonify({
+
+    response_data = {
         'success': True,
         'message': get_text(lang, 'api_tool_info'),
         'tool': {
@@ -3290,7 +3459,15 @@ def api_get_tool_info(tool_name: str):
             'parameter_details': params,
             'example_usage': _get_tool_example(tool_name)
         }
-    })
+    }
+
+    etag = generate_etag(response_data)
+    if request.headers.get('If-None-Match') == etag:
+        return '', 304
+
+    response = make_response(jsonify(response_data))
+    response.headers['ETag'] = etag
+    return add_etag_and_cache(response, max_age=300)
 
 @app.route('/api/tools/<tool_name>', methods=['POST'])
 def api_call_tool(tool_name: str):
@@ -3384,14 +3561,14 @@ def api_call_tool(tool_name: str):
               type: string
     """
     lang = request.args.get('lang', 'en')
-    
+
     if tool_name not in TOOL_REGISTRY:
         return jsonify({
             'success': False,
             'error': get_text(lang, 'api_error_tool_not_found'),
             'message': f'Tool "{tool_name}" not found'
         }), 404
-    
+
     try:
         if not request.is_json:
             return jsonify({
@@ -3399,7 +3576,7 @@ def api_call_tool(tool_name: str):
                 'error': get_text(lang, 'api_error_invalid_json'),
                 'message': 'Request must be JSON'
             }), 400
-        
+
         params = request.json
         if params is None:
             return jsonify({
@@ -3407,11 +3584,11 @@ def api_call_tool(tool_name: str):
                 'error': get_text(lang, 'api_error_invalid_json'),
                 'message': 'Invalid JSON body'
             }), 400
-        
+
         tool_schema = TOOL_REGISTRY[tool_name]['params_schema']
         required_params = [p for p, v in tool_schema.items() if v.get('required', False)]
         missing_params = [p for p in required_params if p not in params or params[p] is None]
-        
+
         if missing_params:
             return jsonify({
                 'success': False,
@@ -3419,17 +3596,25 @@ def api_call_tool(tool_name: str):
                 'message': f'Missing required parameters: {", ".join(missing_params)}',
                 'missing_parameters': missing_params
             }), 400
-        
+
         merged_params = {}
         for param_name, param_schema in tool_schema.items():
             if param_name in params:
                 merged_params[param_name] = params[param_name]
             elif param_schema.get('default') is not None:
                 merged_params[param_name] = param_schema['default']
-        
+
         result = AsyncRunner.run_async(call_mcp_tool(tool_name, merged_params))
-        
+
         if result.get('success'):
+            try:
+                cache_manager.invalidate_pattern('api:tools:*')
+                if tool_name in ('sync_inventory', 'sync_price', 'update_amazon_price',
+                                 'save_product_profile', 'update_fulfillment_amazon'):
+                    cache_manager.invalidate_pattern('api:analytics:*')
+            except Exception:
+                pass
+
             return jsonify({
                 'success': True,
                 'message': get_text(lang, 'api_tool_called'),
@@ -3445,7 +3630,7 @@ def api_call_tool(tool_name: str):
                 'message': 'Tool execution failed',
                 'traceback': result.get('traceback')
             }), 500
-            
+
     except Exception as e:
         return jsonify({
             'success': False,
@@ -3484,7 +3669,7 @@ def _get_tool_example(tool_name: str) -> dict:
 def api_call_tool_with_name():
     """POST /api/tools - Alternative endpoint with tool_name in body"""
     lang = request.args.get('lang', 'en')
-    
+
     try:
         if not request.is_json:
             return jsonify({
@@ -3492,24 +3677,24 @@ def api_call_tool_with_name():
                 'error': get_text(lang, 'api_error_invalid_json'),
                 'message': 'Request must be JSON'
             }), 400
-        
+
         data = request.json
         tool_name = data.get('tool_name') or data.get('tool')
-        
+
         if not tool_name:
             return jsonify({
                 'success': False,
                 'error': get_text(lang, 'api_error_missing_params'),
                 'message': 'Missing required parameter: tool_name'
             }), 400
-        
+
         if tool_name not in TOOL_REGISTRY:
             return jsonify({
                 'success': False,
                 'error': get_text(lang, 'api_error_tool_not_found'),
                 'message': f'Tool "{tool_name}" not found'
             }), 404
-        
+
         params = data.get('parameters', data)
         if 'tool_name' in params:
             del params['tool_name']
@@ -3517,10 +3702,18 @@ def api_call_tool_with_name():
             del params['tool']
         if 'parameters' in params:
             del params['parameters']
-        
+
         result = AsyncRunner.run_async(call_mcp_tool(tool_name, params))
-        
+
         if result.get('success'):
+            try:
+                cache_manager.invalidate_pattern('api:tools:*')
+                if tool_name in ('sync_inventory', 'sync_price', 'update_amazon_price',
+                                 'save_product_profile', 'update_fulfillment_amazon'):
+                    cache_manager.invalidate_pattern('api:analytics:*')
+            except Exception:
+                pass
+
             return jsonify({
                 'success': True,
                 'message': get_text(lang, 'api_tool_called'),
@@ -3535,7 +3728,7 @@ def api_call_tool_with_name():
                 'tool': tool_name,
                 'message': 'Tool execution failed'
             }), 500
-            
+
     except Exception as e:
         return jsonify({
             'success': False,
@@ -3745,7 +3938,7 @@ def export_inventory_csv():
                     'shortage': alert.get('shortage', 0),
                     'severity': alert.get('severity', 'unknown')
                 })
-    except Exception as e:
+    except Exception:
         pass
 
     output = io.StringIO()
@@ -3782,7 +3975,7 @@ def export_orders_csv():
         if result.get('success'):
             data = json.loads(result['data'])
             orders = data.get('orders', [])
-    except Exception as e:
+    except Exception:
         pass
 
     output = io.StringIO()
@@ -3823,7 +4016,7 @@ def export_reviews_csv():
 
             if min_rating > 0:
                 alerts = [a for a in alerts if a.get('rating', 5) <= min_rating]
-    except Exception as e:
+    except Exception:
         pass
 
     output = io.StringIO()
@@ -3860,7 +4053,7 @@ def export_competitors_csv():
         if result.get('success'):
             data = json.loads(result['data'])
             competitors = data.get('competitors', [])
-    except Exception as e:
+    except Exception:
         pass
 
     output = io.StringIO()
@@ -4081,26 +4274,34 @@ def export_report_pdf():
 def api_get_history(metric):
     """GET /api/history/<metric> - Get historical data for a metric"""
     from database import get_snapshots
-    
+
     days = request.args.get('days', 30, type=int)
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
-    
+
     if metric not in ['inventory', 'orders', 'reviews', 'competitors']:
         return jsonify({
             'success': False,
             'error': f'Invalid metric: {metric}',
             'valid_metrics': ['inventory', 'orders', 'reviews', 'competitors']
         }), 400
-    
+
     try:
         snapshots = get_snapshots(metric, start_date, end_date)
-        return jsonify({
+        response_data = {
             'success': True,
             'metric': metric,
             'count': len(snapshots),
             'snapshots': snapshots
-        })
+        }
+
+        etag = generate_etag(response_data)
+        if request.headers.get('If-None-Match') == etag:
+            return '', 304
+
+        response = make_response(jsonify(response_data))
+        response.headers['ETag'] = etag
+        return add_etag_and_cache(response, max_age=120)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -4109,9 +4310,9 @@ def api_get_history(metric):
 def api_get_trends(metric):
     """GET /api/trends/<metric> - Get trend analysis for a metric"""
     from analytics_engine import analyzer
-    
+
     days = request.args.get('days', 30, type=int)
-    
+
     try:
         trend_result = analyzer.calculate_trends(metric, days)
         return jsonify({
@@ -4132,14 +4333,14 @@ def api_get_trends(metric):
 def api_get_forecast(sku):
     """GET /api/forecast/<sku> - Get stockout prediction for a SKU"""
     from analytics_engine import analyzer
-    
+
     current_stock = request.args.get('current_stock', type=int)
     sales_velocity = request.args.get('sales_velocity', type=float)
     lead_time_days = request.args.get('lead_time_days', 14, type=int)
-    
+
     if current_stock is None or sales_velocity is None:
         return jsonify({'success': False, 'error': 'Missing required parameters: current_stock and sales_velocity'}), 400
-    
+
     try:
         prediction = analyzer.predict_stockout(sku, current_stock, sales_velocity, lead_time_days)
         return jsonify({
@@ -4159,17 +4360,17 @@ def api_get_forecast(sku):
 def api_take_snapshot():
     """POST /api/snapshot - Take a manual snapshot"""
     from database import save_snapshot
-    
+
     if not request.is_json:
         return jsonify({'success': False, 'error': 'Request must be JSON'}), 400
-    
+
     data = request.json
     snapshot_type = data.get('snapshot_type')
     snapshot_data = data.get('data', {})
-    
+
     if snapshot_type not in ['inventory', 'orders', 'reviews', 'competitors']:
-        return jsonify({'success': False, 'error': f'Invalid snapshot_type'}), 400
-    
+        return jsonify({'success': False, 'error': 'Invalid snapshot_type'}), 400
+
     try:
         snapshot_id = save_snapshot(snapshot_type, snapshot_data)
         return jsonify({'success': True, 'snapshot_id': snapshot_id, 'snapshot_type': snapshot_type}), 201
@@ -4210,11 +4411,19 @@ def api_analytics_summary():
               type: string
     """
     from analytics_engine import analyzer
-    
+
     try:
         stats = analyzer.get_comparative_stats()
         health = analyzer.get_inventory_health_score()
-        return jsonify({'success': True, 'comparative_stats': stats, 'health_score': health})
+        response_data = {'success': True, 'comparative_stats': stats, 'health_score': health}
+
+        etag = generate_etag(response_data)
+        if request.headers.get('If-None-Match') == etag:
+            return '', 304
+
+        response = make_response(jsonify(response_data))
+        response.headers['ETag'] = etag
+        return add_etag_and_cache(response, max_age=60)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -4223,10 +4432,10 @@ def api_analytics_summary():
 def api_analytics_forecast():
     """GET /api/analytics/forecast - Generate forecast"""
     from analytics_engine import analyzer
-    
+
     metric = request.args.get('metric', 'low_stock_count')
     days_ahead = request.args.get('days_ahead', 7, type=int)
-    
+
     try:
         forecast = analyzer.generate_forecast(metric, days_ahead)
         return jsonify({'success': True, 'forecast': forecast})
@@ -4268,7 +4477,7 @@ def api_health():
                 active_tasks:
                   type: integer
     """
-    return jsonify({
+    response_data = {
         'success': True,
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
@@ -4278,23 +4487,31 @@ def api_health():
             'total_tasks': len(TASK_QUEUE),
             'active_tasks': len(get_active_tasks())
         }
-    })
+    }
+
+    etag = generate_etag(response_data)
+    if request.headers.get('If-None-Match') == etag:
+        return '', 304
+
+    response = make_response(jsonify(response_data))
+    response.headers['ETag'] = etag
+    return add_etag_and_cache(response, max_age=30)
 
 @app.route('/api/inventory/forecast', methods=['GET'])
 def api_inventory_forecast():
     """GET /api/inventory/forecast - Get inventory stockout predictions"""
     from analytics_engine import analyzer
-    
+
     threshold = request.args.get('threshold', 14, type=int)
     lead_time = request.args.get('lead_time', 14, type=int)
-    
+
     try:
         risk_products = analyzer.identify_risk_products(threshold_days=threshold)
-        
+
         for product in risk_products:
             dos = analyzer.calculate_days_of_supply(product['sku'])
             product['days_of_supply'] = dos.get('days_of_supply', float('inf'))
-            
+
             reorder = analyzer.calculate_reorder_quantity(
                 product['sku'],
                 sales_velocity=product.get('days_until_stockout', 1) / (dos.get('days_of_supply', 30) or 30),
@@ -4303,7 +4520,7 @@ def api_inventory_forecast():
             )
             product['reorder_quantity'] = reorder.get('reorder_quantity', 0)
             product['reorder_urgency'] = reorder.get('urgency', 'none')
-        
+
         return jsonify({
             'success': True,
             'forecast': risk_products,
@@ -4322,21 +4539,21 @@ def api_inventory_forecast():
 def api_inventory_reorder(sku):
     """GET /api/inventory/reorder/<sku> - Get reorder recommendation for a SKU"""
     from analytics_engine import analyzer
-    
+
     lead_time = request.args.get('lead_time', 14, type=int)
     target_days = request.args.get('target_days', 30, type=int)
-    
+
     try:
         dos = analyzer.calculate_days_of_supply(sku)
         sales_velocity = dos.get('avg_daily_demand', 0)
-        
+
         reorder = analyzer.calculate_reorder_quantity(
             sku,
             sales_velocity=sales_velocity,
             lead_time=lead_time,
             target_days=target_days
         )
-        
+
         return jsonify({
             'success': True,
             'reorder': reorder,
@@ -4349,13 +4566,13 @@ def api_inventory_reorder(sku):
 def api_inventory_health():
     """GET /api/inventory/health - Get overall inventory health score"""
     from analytics_engine import analyzer
-    
+
     try:
         health_score = analyzer.get_inventory_health_score()
-        
+
         risk_products = analyzer.identify_risk_products(threshold_days=14)
-        
-        return jsonify({
+
+        response_data = {
             'success': True,
             'health': health_score,
             'risk_summary': {
@@ -4365,7 +4582,15 @@ def api_inventory_health():
                 'medium': sum(1 for p in risk_products if p['risk_level'] == 'medium'),
                 'low': sum(1 for p in risk_products if p['risk_level'] == 'low')
             }
-        })
+        }
+
+        etag = generate_etag(response_data)
+        if request.headers.get('If-None-Match') == etag:
+            return '', 304
+
+        response = make_response(jsonify(response_data))
+        response.headers['ETag'] = etag
+        return add_etag_and_cache(response, max_age=60)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -4373,13 +4598,13 @@ def api_inventory_health():
 def api_competitor_trends(asin):
     """GET /api/competitor/trends/<asin> - Get price trends for a competitor ASIN"""
     from analytics_engine import competitor_analyzer
-    
+
     try:
         days = request.args.get('days', 30, type=int)
         competitor_analyzer.track_price_changes(asin, days=days)
         trend_data = competitor_analyzer.identify_price_trends(asin)
         prediction = competitor_analyzer.predict_price_movements(asin)
-        
+
         return jsonify({
             'success': True,
             'asin': asin,
@@ -4400,25 +4625,25 @@ def api_competitor_trends(asin):
 def api_competitor_alerts():
     """GET /api/competitor/alerts - Get significant competitor movement alerts"""
     from analytics_engine import competitor_analyzer
-    
+
     try:
         asins_param = request.args.get('asins', '')
         asins = [a.strip() for a in asins_param.split(',') if a.strip()]
-        
+
         if not asins:
             asins = request.args.getlist('asin')
-        
+
         if not asins:
             return jsonify({
                 'success': True,
                 'alerts': [],
                 'count': 0
             })
-        
+
         alerts = competitor_analyzer.get_price_alerts(asins)
-        
+
         movements = competitor_analyzer.detect_competitive_movements(asins)
-        
+
         return jsonify({
             'success': True,
             'alerts': alerts,
@@ -4432,17 +4657,17 @@ def api_competitor_alerts():
 def api_competitor_market_position(asin):
     """GET /api/competitor/market-position/<asin> - Get market position analysis"""
     from analytics_engine import competitor_analyzer
-    
+
     try:
         competitors_param = request.args.get('competitors', '')
         competitors = []
-        
+
         if competitors_param:
             try:
                 competitors = json.loads(competitors_param)
             except json.JSONDecodeError:
                 pass
-        
+
         if not competitors:
             search_term = request.args.get('search_term', asin)
             result = AsyncRunner.run_async(call_mcp_tool('get_competitor_prices', {
@@ -4450,14 +4675,14 @@ def api_competitor_market_position(asin):
                 'limit': 10,
                 'response_format': 'json'
             }))
-            
+
             if result.get('success'):
                 data = json.loads(result['data'])
                 competitors = data.get('competitors', [])
-        
+
         market_position = competitor_analyzer.calculate_market_position(asin, competitors)
         market_shifts = competitor_analyzer.detect_market_share_shifts(asin, competitors)
-        
+
         return jsonify({
             'success': True,
             'asin': asin,
@@ -4604,7 +4829,7 @@ SCHEDULES_LOCK = threading.Lock()
 def load_schedules():
     try:
         if os.path.exists(SCHEDULES_FILE):
-            with open(SCHEDULES_FILE, 'r') as f:
+            with open(SCHEDULES_FILE) as f:
                 return json.load(f)
     except Exception:
         pass
@@ -4850,7 +5075,7 @@ def notifications_page():
     lang = request.args.get('lang', 'en')
     notif_service = get_notification_service()
     prefs = notif_service.get_preferences()
-    
+
     preferences = {
         'email_enabled': prefs.email_enabled,
         'email_address': prefs.email_address,
@@ -4869,12 +5094,12 @@ def notifications_page():
         'notify_tasks': prefs.notify_tasks,
         'frequency': prefs.frequency
     }
-    
+
     queue = notif_service.get_queue()
     history = notif_service.get_history(limit=20)
-    
-    return render_template('notifications.html', 
-                         lang=lang, 
+
+    return render_template('notifications.html',
+                         lang=lang,
                          get_text=lambda key: get_text(lang, key),
                          preferences=preferences,
                          queue=queue,
@@ -4932,7 +5157,7 @@ def api_get_notifications():
     """
     notif_service = get_notification_service()
     prefs = notif_service.get_preferences()
-    
+
     return jsonify({
         'success': True,
         'preferences': {
@@ -4956,10 +5181,10 @@ def api_get_notifications():
 @app.route('/api/notifications/preferences', methods=['POST'])
 def api_save_preferences():
     data = request.get_json()
-    
+
     if not data:
         return jsonify({'success': False, 'message': 'No data provided'}), 400
-    
+
     prefs = NotificationPreference(
         email_enabled=data.get('email_enabled', False),
         slack_enabled=data.get('slack_enabled', False),
@@ -4979,10 +5204,10 @@ def api_save_preferences():
         notify_tasks=data.get('notify_tasks', True),
         frequency=data.get('frequency', 'immediate')
     )
-    
+
     notif_service = get_notification_service()
     notif_service.update_preferences(prefs)
-    
+
     return jsonify({'success': True, 'message': 'Preferences saved successfully'})
 
 @app.route('/api/notifications/test', methods=['POST'])
@@ -4990,7 +5215,7 @@ def api_send_test():
     lang = request.args.get('lang', 'en')
     notif_service = get_notification_service()
     results = notif_service.send_test_notification(lang)
-    
+
     email_ok = results.get('email', {}).get('success', False)
     slack_ok = results.get('slack', {}).get('success', False)
     dingtalk_ok = results.get('dingtalk', {}).get('success', False)
@@ -5117,7 +5342,7 @@ def audit_logs_page():
                     log['formatted_time'] = log['timestamp']
                     log['relative_time'] = 'unknown'
 
-    except Exception as e:
+    except Exception:
         logs = []
 
     action_choices = [a.value for a in AuditAction]
@@ -5278,19 +5503,19 @@ def api_cleanup_audit_logs():
 if __name__ == '__main__':
     import threading
     import time
-    from database import save_snapshot
+
     from analytics_engine import take_daily_snapshot
-    
+
     admin_result = auth_service.register_user('admin@demo.com', 'admin123', 'admin')
     if admin_result.get('success'):
-        print(f"✅ Demo admin user created: admin@demo.com/admin123")
+        print("✅ Demo admin user created: admin@demo.com/admin123")
     manager_result = auth_service.register_user('manager@demo.com', 'manager123', 'manager')
     if manager_result.get('success'):
-        print(f"✅ Demo manager user created: manager@demo.com/manager123")
+        print("✅ Demo manager user created: manager@demo.com/manager123")
     viewer_result = auth_service.register_user('viewer@demo.com', 'viewer123', 'viewer')
     if viewer_result.get('success'):
-        print(f"✅ Demo viewer user created: viewer@demo.com/viewer123")
-    
+        print("✅ Demo viewer user created: viewer@demo.com/viewer123")
+
     def run_daily_snapshot():
         last_snapshot_date = None
         while True:
@@ -5303,11 +5528,11 @@ if __name__ == '__main__':
             except Exception as e:
                 print(f"Snapshot error: {e}")
             time.sleep(3600)
-    
+
     snapshot_thread = threading.Thread(target=run_daily_snapshot, daemon=True)
     snapshot_thread.start()
     print("📊 Daily snapshot scheduler started")
-    
+
     print("="*60)
     print("🚀 Cross-Border Seller Web UI + REST API")
     print("跨境卖家Web界面 + REST API - 启动中...")
@@ -5413,14 +5638,14 @@ def execute_background_task(task_id: str):
             TASK_QUEUE[task_id]['status'] = 'failed'
             TASK_QUEUE[task_id]['error'] = str(e)
             TASK_QUEUE[task_id]['completed_at'] = datetime.now().isoformat()
-            TASK_QUEUE[task_id]['message'] = f'Task error: {str(e)}'
+            TASK_QUEUE[task_id]['message'] = f'Task error: {e!s}'
 
 def submit_background_task(tool_name: str, parameters: dict) -> dict:
     task = create_task(tool_name, parameters)
     TASK_EXECUTOR.submit(execute_background_task, task['task_id'])
     return task
 
-def get_task(task_id: str) -> Optional[dict]:
+def get_task(task_id: str) -> dict | None:
     with TASK_LOCK:
         return TASK_QUEUE.get(task_id)
 
@@ -5435,9 +5660,9 @@ def get_all_tasks(status: str = None, limit: int = 100) -> list:
 def get_active_tasks() -> list:
     return get_all_tasks(status='running') + get_all_tasks(status='pending')
 
-def aggregate_low_stock_by_date(alerts: List[dict], dates: List[str]) -> Dict[str, List]:
-    critical_counts = {d: 0 for d in dates}
-    warning_counts = {d: 0 for d in dates}
+def aggregate_low_stock_by_date(alerts: list[dict], dates: list[str]) -> dict[str, list]:
+    critical_counts = dict.fromkeys(dates, 0)
+    warning_counts = dict.fromkeys(dates, 0)
 
     for alert in alerts:
         if 'severity' in alert:
@@ -5456,7 +5681,7 @@ def aggregate_low_stock_by_date(alerts: List[dict], dates: List[str]) -> Dict[st
         'total_warning': sum(warning_counts.values())
     }
 
-def aggregate_reviews_by_date(reviews: List[dict], dates: List[str]) -> Dict[str, List]:
+def aggregate_reviews_by_date(reviews: list[dict], dates: list[str]) -> dict[str, list]:
     rating_counts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
     daily_counts = {d: {1: 0, 2: 0, 3: 0, 4: 0, 5: 0} for d in dates}
 
@@ -5487,7 +5712,7 @@ def aggregate_reviews_by_date(reviews: List[dict], dates: List[str]) -> Dict[str
         'avg_rating': round(sum(r * c for r, c in rating_counts.items()) / sum(rating_counts.values()), 1) if sum(rating_counts.values()) > 0 else 0
     }
 
-def generate_mock_historical_data(days: int) -> Dict[str, Any]:
+def generate_mock_historical_data(days: int) -> dict[str, Any]:
     dates = generate_date_range(days)
     base_orders = random.randint(5, 20)
     base_revenue = random.uniform(200, 500)
@@ -5535,17 +5760,17 @@ def generate_mock_historical_data(days: int) -> Dict[str, Any]:
 def admin_dashboard():
     lang = request.args.get('lang', 'cn')
     user = session.get('user')
-    
+
     users = auth_service.get_all_users()
     recent_logs = audit_logger.get_recent_logs(limit=20)
-    
+
     stats = {
         'total_users': len(users),
         'active_users': len([u for u in users if u.get('is_active', True)]),
         'active_sessions': 1,
         'api_usage_today': random.randint(100, 1000)
     }
-    
+
     return render_template('admin.html',
                          lang=lang,
                          get_text=lambda key: get_text(lang, key),
@@ -5558,16 +5783,16 @@ def admin_dashboard():
 def admin_users():
     lang = request.args.get('lang', 'cn')
     user = session.get('user')
-    
+
     users = auth_service.get_all_users()
     search = request.args.get('search', '')
     role_filter = request.args.get('role', '')
-    
+
     if search:
         users = [u for u in users if search.lower() in u.get('username', '').lower() or search.lower() in u.get('email', '').lower()]
     if role_filter:
         users = [u for u in users if u.get('role') == role_filter]
-    
+
     return render_template('admin/users.html',
                          lang=lang,
                          get_text=lambda key: get_text(lang, key),
@@ -5585,7 +5810,7 @@ def admin_create_user():
     email = request.form.get('email')
     password = request.form.get('password')
     role = request.form.get('role', 'viewer')
-    
+
     result = auth_service.register_user(email, password, role)
     if result.get('success'):
         current_user = session.get('user')
@@ -5593,7 +5818,7 @@ def admin_create_user():
         flash(get_text(lang, 'user_created'), 'success')
     else:
         flash(result.get('error', get_text(lang, 'save_failed')), 'error')
-    
+
     return redirect(url_for('admin_users', lang=lang))
 
 @app.route('/admin/users/<user_id>/edit', methods=['POST'])
@@ -5601,7 +5826,7 @@ def admin_create_user():
 def admin_edit_user(user_id):
     lang = request.args.get('lang', 'cn')
     updates = {}
-    
+
     if request.form.get('username'):
         updates['username'] = request.form.get('username')
     if request.form.get('email'):
@@ -5612,28 +5837,28 @@ def admin_edit_user(user_id):
         updates['is_active'] = request.form.get('is_active') == 'true'
     if request.form.get('password'):
         updates['password'] = request.form.get('password')
-    
+
     if auth_service.update_user(user_id, updates):
         current_user = session.get('user')
         audit_logger.log(current_user['id'], current_user['username'], 'update_user', 'user', user_id, updates)
         flash(get_text(lang, 'user_updated'), 'success')
     else:
         flash(get_text(lang, 'save_failed'), 'error')
-    
+
     return redirect(url_for('admin_users', lang=lang))
 
 @app.route('/admin/users/<user_id>/delete', methods=['POST'])
 @role_required('admin')
 def admin_delete_user(user_id):
     lang = request.args.get('lang', 'cn')
-    
+
     if auth_service.delete_user(user_id):
         current_user = session.get('user')
         audit_logger.log(current_user['id'], current_user['username'], 'delete_user', 'user', user_id)
         flash(get_text(lang, 'user_deleted'), 'success')
     else:
         flash(get_text(lang, 'save_failed'), 'error')
-    
+
     return redirect(url_for('admin_users', lang=lang))
 
 @app.route('/admin/roles')
@@ -5641,21 +5866,21 @@ def admin_delete_user(user_id):
 def admin_roles():
     lang = request.args.get('lang', 'cn')
     user = session.get('user')
-    
+
     roles_data = []
     for role in ['admin', 'manager', 'viewer']:
         roles_data.append({
             'name': role,
             'permissions': get_user_permissions(role)
         })
-    
+
     all_permissions = [
         'read', 'write', 'delete', 'admin_access',
         'manage_users', 'manage_roles', 'view_audit_logs',
         'manage_settings', 'manage_inventory', 'manage_tasks',
         'manage_schedules', 'view_analytics', 'manage_notifications'
     ]
-    
+
     return render_template('admin/roles.html',
                          lang=lang,
                          get_text=lambda key: get_text(lang, key),
@@ -5668,9 +5893,9 @@ def admin_roles():
 def admin_update_role(role):
     lang = request.args.get('lang', 'cn')
     permissions = request.form.getlist('permissions')
-    
+
     flash(get_text(lang, 'user_updated'), 'success')
-    
+
     return redirect(url_for('admin_roles', lang=lang))
 
 
@@ -5691,9 +5916,9 @@ def api_create_key():
     data = request.get_json() or {}
     name = data.get('name', 'API Key')
     rate_limit = data.get('rate_limit', 60)
-    
+
     result = create_api_key_for_user(user_id, name, rate_limit)
-    
+
     if result:
         return jsonify({
             'success': True,
@@ -5713,7 +5938,7 @@ def api_create_key():
 def api_revoke_key(key_id):
     """Revoke an API key"""
     user_id = g.current_user['user_id']
-    
+
     if revoke_user_api_key(key_id, user_id):
         return jsonify({'success': True, 'message': 'API key revoked'})
     else:
@@ -5727,14 +5952,14 @@ def admin_api_keys():
     lang = request.args.get('lang', 'cn')
     users = auth_service.get_all_users()
     all_keys = []
-    
+
     for user in users:
         user_keys = list_user_api_keys(user['user_id'])
         for key in user_keys:
             key['user_email'] = user['email']
             key['user_role'] = user['role']
             all_keys.append(key)
-    
+
     return render_template('admin/api_keys.html',
                          lang=lang,
                          get_text=lambda key: get_text(lang, key),
@@ -5746,9 +5971,9 @@ def admin_api_keys():
 def admin_audit_logs():
     lang = request.args.get('lang', 'cn')
     user = session.get('user')
-    
+
     logs = audit_logger.get_logs(limit=100)
-    
+
     return render_template('admin/audit_logs.html',
                          lang=lang,
                          get_text=lambda key: get_text(lang, key),

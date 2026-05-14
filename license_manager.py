@@ -4,11 +4,10 @@
 Cross-Border Seller MCP Server - License Manager
 """
 
-from enum import Enum
-from dataclasses import dataclass
-from typing import Optional, List
-from datetime import datetime
 import os
+from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
 
 
 class LicenseTier(Enum):
@@ -24,8 +23,8 @@ class License:
     key: str
     tier: LicenseTier
     activated_at: datetime
-    expires_at: Optional[datetime] = None
-    features: List[str] = None
+    expires_at: datetime | None = None
+    features: list[str] = None
 
     def __post_init__(self):
         if self.features is None:
@@ -83,7 +82,7 @@ TIER_FEATURES = {
 }
 
 
-def get_features_for_tier(tier: LicenseTier) -> List[str]:
+def get_features_for_tier(tier: LicenseTier) -> list[str]:
     """获取指定等级的功能列表"""
     return TIER_FEATURES.get(tier, TIER_FEATURES[LicenseTier.FREE])
 
@@ -99,7 +98,7 @@ DEMO_LICENSES = {
 class LicenseManager:
     """许可证管理器"""
 
-    def __init__(self, license_key: Optional[str] = None):
+    def __init__(self, license_key: str | None = None):
         self._license_key_override = license_key
 
     def _get_license_key(self) -> str:
@@ -144,11 +143,11 @@ class LicenseManager:
         license = self.get_current_license()
         return feature_name in license.features
 
-    def reset(self, license_key: Optional[str] = None):
+    def reset(self, license_key: str | None = None):
         """重置许可证管理器"""
         self._license_key_override = license_key
 
-    def get_tier_name(self, tier: Optional[LicenseTier] = None) -> str:
+    def get_tier_name(self, tier: LicenseTier | None = None) -> str:
         """获取等级名称（中文）"""
         tier = tier or self.get_current_license().tier
         names = {
@@ -178,7 +177,7 @@ class LicenseManager:
 
 
 # 单例实例
-_license_manager: Optional[LicenseManager] = None
+_license_manager: LicenseManager | None = None
 
 
 def get_license_manager() -> LicenseManager:
@@ -189,7 +188,7 @@ def get_license_manager() -> LicenseManager:
     return _license_manager
 
 
-def reset_license_manager(license_key: Optional[str] = None):
+def reset_license_manager(license_key: str | None = None):
     """重置许可证管理器（用于测试）"""
     global _license_manager
     _license_manager = LicenseManager(license_key=license_key)
