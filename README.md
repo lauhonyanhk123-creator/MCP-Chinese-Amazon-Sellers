@@ -25,6 +25,7 @@ A Model Context Protocol (MCP) server for cross-border e-commerce sellers to man
 - [Configuration | 配置](#configuration--配置)
 - [Running the Server | 运行服务器](#running-the-server--运行服务器)
 - [Available Tools | 可用工具](#available-tools--可用工具)
+- [API Reference | API参考](#api-reference--api参考)
 - [Testing | 测试](#testing--测试)
 - [API Setup Guides | API设置指南](#api-setup-guides--api设置指南)
 - [Troubleshooting | 故障排除](#troubleshooting--故障排除)
@@ -176,6 +177,29 @@ python server.py
 ```bash
 python server.py --transport streamable_http --port 8000
 ```
+
+### Web UI Production Deployment | Web界面生产部署
+
+For production environments, use Gunicorn instead of the Flask development server:
+
+```bash
+# Install Gunicorn
+pip install gunicorn
+
+# Run with Gunicorn (4 workers)
+gunicorn -w 4 -b 0.0.0.0:5000 web_app:app
+
+# Or use the production start script
+./start_prod.sh
+
+# With custom configuration
+PORT=8080 WORKERS=8 ./start_prod.sh
+```
+
+Production features:
+- Multiple worker processes for better concurrency
+- Production-grade error handling
+- Access and error logging
 
 ---
 
@@ -668,6 +692,48 @@ Get actionable alerts for reviews that need immediate attention.
 
 ---
 
+## API Reference | API参考
+
+For complete API documentation including authentication, endpoints, error codes, rate limiting, and code examples in Python, JavaScript, and cURL, see the **[API Documentation](API.md)**.
+
+### Quick Reference | 快速参考
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/tools` | GET | List all available MCP tools |
+| `/api/tools/<name>` | GET | Get tool info and parameters |
+| `/api/tools/<name>` | POST | Call specific MCP tool |
+| `/api/auth/login` | POST | User authentication |
+| `/api/auth/api-keys` | POST | Create API key |
+| `/api/docs/` | GET | **Swagger UI** - Interactive API explorer |
+
+### Authentication | 认证
+
+The API supports two authentication methods:
+
+1. **Session Cookie**: Login via web UI for browser-based access
+2. **API Key**: Programmatic access using `X-API-Key` header
+
+```bash
+# Using API Key
+curl -X POST "http://localhost:5000/api/tools/get_inventory_1688" \
+  -H "X-API-Key: YOUR_API_KEY_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"sku": "SKU-12345", "response_format": "json"}'
+```
+
+### Swagger UI
+
+Interactive API documentation is available at **`/api/docs/`**:
+
+```bash
+# Run server and open in browser
+python web_app.py
+# Then visit http://localhost:5000/api/docs/
+```
+
+---
+
 ## Price Sync Configuration | 价格同步配置
 
 Configure pricing parameters in `.env`:
@@ -766,6 +832,293 @@ python test_server.py --verbose
 
 ---
 
+## Notification Preferences | 通知偏好设置
+
+The system supports multiple notification channels:
+
+| Channel | Description | Setup Required |
+|---------|-------------|----------------|
+| Email | SMTP-based email notifications | SMTP server configuration |
+| Slack | Slack webhook notifications | Slack webhook URL |
+| WeChat Work | 企业微信 webhook notifications | WeChat Work webhook URL |
+| DingTalk | 钉钉 webhook notifications | DingTalk webhook URL |
+
+### Notification Types | 通知类型
+
+- **Low Stock Alerts** | 低库存警报: Triggered when inventory falls below threshold
+- **Review Alerts** | 评论预警: Triggered by negative reviews needing attention
+- **Task Completion** | 任务完成: Triggered when background tasks finish
+- **Daily Summary** | 每日摘要: Scheduled daily inventory and order summary
+
+### Notification Frequency | 通知频率
+
+- `IMMEDIATE`: Send notifications as they occur
+- `HOURLY_DIGEST`: Bundle notifications and send hourly
+- `DAILY_DIGEST`: Bundle notifications and send once daily
+
+### Environment Variables for Notifications | 通知环境变量
+
+```bash
+# Enable/disable notification channels
+NOTIFICATION_EMAIL_ENABLED=false
+NOTIFICATION_SLACK_ENABLED=false
+NOTIFICATION_WECHAT_ENABLED=false
+NOTIFICATION_DINGTALK_ENABLED=false
+
+# Recipient addresses
+NOTIFICATION_EMAIL_TO=your@email.com
+
+# Webhook URLs
+NOTIFICATION_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/xxx
+NOTIFICATION_WECHAT_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx
+NOTIFICATION_DINGTALK_WEBHOOK_URL=https://oapi.dingtalk.com/robot/send?access_token=xxx
+
+# Notification preferences
+NOTIFICATION_LOW_STOCK=true
+NOTIFICATION_REVIEWS=true
+NOTIFICATION_TASKS=true
+NOTIFICATION_FREQUENCY=immediate
+
+# Email (SMTP) configuration
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your@email.com
+SMTP_PASSWORD=your_app_password
+SMTP_FROM=your@email.com
+```
+
+---
+
+## WeChat Work Setup | 企业微信配置
+
+WeChat Work (企业微信) provides efficient team communication with webhook integration for automated notifications.
+
+### Step 1: Create a WeChat Work Application | 创建企业微信应用
+
+1. Log in to [WeChat Work Admin Console](https://work.weixin.qq.com/wework_admin/)
+2. Navigate to **Applications** (应用管理)
+3. Click **Create Application** (创建应用)
+4. Select application type (usually **Custom App** | 自建应用)
+5. Enter application name (e.g., "Cross-Border Seller Alerts")
+6. Upload application icon (optional)
+7. Configure application visibility scope
+
+### Step 2: Get the Webhook URL | 获取Webhook地址
+
+1. Open your created application
+2. Navigate to **Application Settings** (应用设置)
+3. Find **Webhook** (企业群机器人) section
+4. Click **Add** (添加)
+5. Give the webhook a name (e.g., "MCP Server Alerts")
+6. Copy the generated webhook URL
+
+**Webhook URL Format:**
+```
+https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+```
+
+### Step 3: Required Permissions | 所需权限
+
+**Admin Permissions:**
+- `Super Admin` or `Application Admin` privileges to create applications
+- Ability to access the application settings
+
+**Application Settings:**
+- Enable "Allow external messages" if using external contacts
+- Configure message receiving permissions as needed
+
+**Webhook Configuration:**
+- Webhook can send messages to group chats
+- No additional API permissions required for basic webhook usage
+
+### Step 4: Configure Environment Variables | 配置环境变量
+
+Add to your `.env` file:
+
+```bash
+# Enable WeChat Work notifications
+NOTIFICATION_WECHAT_ENABLED=true
+
+# Your webhook URL from Step 2
+NOTIFICATION_WECHAT_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+```
+
+### Step 5: Test the Integration | 测试集成
+
+```bash
+# Run the test suite which includes WeChat notification testing
+python test_server.py
+
+# Or send a test notification directly
+python -c "
+from notification import get_notification_service
+service = get_notification_service()
+result = service.send_test_notification(lang='en')
+print('WeChat Result:', result.get('wechat'))
+"
+```
+
+### Message Format | 消息格式
+
+WeChat Work webhooks support Markdown-formatted messages:
+
+```json
+{
+  "msgtype": "markdown",
+  "markdown": {
+    "content": "### 🔴 Low Stock Alert\n\n**Product:** Wireless Headphones\n**SKU:** SKU-12345\n**Current Stock:** 3\n**Threshold:** 10"
+  }
+}
+```
+
+---
+
+## DingTalk Setup | 钉钉配置
+
+DingTalk (钉钉) is Alibaba's enterprise communication platform with robust webhook notification support.
+
+### Step 1: Create a DingTalk Group | 创建钉钉群
+
+1. Open DingTalk application
+2. Create a new group or select existing group for notifications
+3. Go to **Group Settings** (群设置)
+4. Add the "Custom Robot" (自定义机器人) integration
+
+### Step 2: Configure Custom Robot | 配置自定义机器人
+
+1. In Group Settings, find **Group Robots** (群机器人)
+2. Click **Add Robot** (添加机器人)
+3. Select **Custom** (自定义)
+4. Enter robot name (e.g., "MCP Server Alerts")
+5. For security settings, choose:
+   - **Custom Keywords** (加签): Add keyword like "Alert" or "Notification"
+   - **IP Addresses** (ip白名单): Add your server IP (optional)
+   - **Signature** (加签): Copy the secret for later use
+
+### Step 3: Get the Webhook URL | 获取Webhook地址
+
+After adding the robot, you will receive:
+- **Webhook URL**: Copy this URL
+- **Secret** (if using signature): Save this for configuration
+
+**Webhook URL Format:**
+```
+https://oapi.dingtalk.com/robot/send?access_token=XXXXXXXXXXXXXXXXX
+```
+
+### Step 4: Required Permissions | 所需权限
+
+**Group Permissions:**
+- Must be group owner or admin to add robots
+- Requires "Add Bots" permission enabled for the group
+
+**Robot Permissions:**
+- Sending messages only (no reading/group management)
+- Works with standard group membership
+
+### Step 5: Configure Environment Variables | 配置环境变量
+
+Add to your `.env` file:
+
+```bash
+# Enable DingTalk notifications
+NOTIFICATION_DINGTALK_ENABLED=true
+
+# Your webhook URL from Step 3
+NOTIFICATION_DINGTALK_WEBHOOK_URL=https://oapi.dingtalk.com/robot/send?access_token=XXXXXXXXXXXXXXXXX
+```
+
+**Note:** If you enabled signature verification, you'll need to update the notification code to include the secret. The current implementation uses basic webhook mode.
+
+### Step 6: Test the Integration | 测试集成
+
+```bash
+# Run the test suite
+python test_server.py
+
+# Test DingTalk specifically
+python -c "
+from notification import get_notification_service
+service = get_notification_service()
+result = service.send_test_notification(lang='cn')
+print('DingTalk Result:', result)
+"
+```
+
+### Message Format | 消息格式
+
+DingTalk supports Markdown messages:
+
+```json
+{
+  "msgtype": "markdown",
+  "markdown": {
+    "title": "🔴 Low Stock Alert",
+    "text": "## 🔴 Low Stock Alert\n\n**Product:** Wireless Headphones\n**SKU:** SKU-12345\n**Current Stock:** 3\n**Threshold:** 10"
+  }
+}
+```
+
+---
+
+## China-Specific Configuration | 中国特定配置
+
+### Environment Variables for China Services | 中国服务环境变量
+
+```bash
+# WeChat Work Configuration | 企业微信配置
+NOTIFICATION_WECHAT_ENABLED=true
+NOTIFICATION_WECHAT_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx
+
+# DingTalk Configuration | 钉钉配置
+NOTIFICATION_DINGTALK_ENABLED=true
+NOTIFICATION_DINGTALK_WEBHOOK_URL=https://oapi.dingtalk.com/robot/send?access_token=xxx
+
+# Note: Both services use Chinese data centers by default
+# No special CDN configuration needed for WeChat/DingTalk
+```
+
+### CDN Alternatives for China | 中国CDN替代方案
+
+If external CDN resources fail to load in China:
+
+| Resource | Default CDN | China Alternative |
+|----------|-------------|-------------------|
+| Python packages | PyPI | [Tsinghua Mirror](https://mirror.tuna.tsinghua.edu.cn/pypi/) |
+| npm packages | npmjs.com | [Taobao Mirror](https://npmmirror.com/) |
+| GitHub resources | github.com | [Fastgit](https://fastgit.org/) or [ghproxy](https://ghproxy.com/) |
+
+**Using China Mirrors:**
+
+```bash
+# pip with Tsinghua mirror
+pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# npm with Taobao mirror
+npm config set registry https://registry.npmmirror.com
+
+# Git clone via mirror
+git clone https://ghproxy.com/https://github.com/user/repo.git
+```
+
+### Regional Settings | 区域设置
+
+For optimal performance in China:
+
+```bash
+# API endpoints (default to global)
+# For China-specific endpoints, check with your service provider
+
+# Timezone
+TZ=Asia/Shanghai
+
+# Currency
+DEFAULT_CURRENCY=CNY
+USD_CNY_EXCHANGE_RATE=7.2
+```
+
+---
+
 ## Troubleshooting | 故障排除
 
 ### Common Issues | 常见问题
@@ -819,16 +1172,107 @@ Error: 1688 resource not found. Please verify the SKU.
 
 ---
 
+### China-Specific Troubleshooting | 中国特定故障排除
+
+#### 5. WeChat Work Webhook Not Working | 企业微信Webhook不工作
+
+**Symptoms | 症状:**
+- Messages not appearing in WeChat Work group
+- HTTP 400 or 401 errors
+
+**Solutions | 解决方案:**
+1. Verify webhook URL is correct and complete
+   ```
+   # Should be:
+   https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=XXX
+   # Not:
+   https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=XXX&debug=1
+   ```
+2. Check if the application has permission to send messages
+3. Ensure the group robot is properly added
+4. Verify the webhook key hasn't expired or been regenerated
+
+#### 6. DingTalk Webhook Not Working | 钉钉Webhook不工作
+
+**Symptoms | 症状:**
+- Messages not appearing in DingTalk group
+- Error code 300001 or 300002
+
+**Solutions | 解决方案:**
+1. Check if the access token is valid
+   ```
+   # Verify URL format:
+   https://oapi.dingtalk.com/robot/send?access_token=XXX
+   ```
+2. If using signature verification, ensure the secret matches
+3. Verify the custom keyword is present in the message content
+4. Check if the group allows external bots
+
+#### 7. CDN Resources Not Loading | CDN资源无法加载
+
+**Symptoms | 症状:**
+- Python packages fail to install
+- Git clone hangs or times out
+- npm packages fail to download
+
+**Solutions | 解决方案:**
+1. Use China-specific mirrors:
+   ```bash
+   # pip
+   pip install package -i https://pypi.tuna.tsinghua.edu.cn/simple
+   
+   # git
+   git config --global url."https://ghproxy.com/".insteadOf https://github.com
+   ```
+
+2. For GitHub access, use mirrors:
+   ```bash
+   # Clone via ghproxy
+   git clone https://ghproxy.com/https://github.com/user/repo.git
+   
+   # Or use fastgit
+   git clone https://download.fastgit.org/user/repo.git
+   ```
+
+3. Check network connectivity:
+   ```bash
+   # Test connectivity
+   ping github.com
+   curl -I https://pypi.org
+   ```
+
+#### 8. VPN Requirements for Setup | VPN设置要求（可选）
+
+**During Initial Setup | 初始设置期间:**
+- VPN may be required to access:
+  - GitHub for repository cloning
+  - PyPI for some packages
+  - Amazon/1688 developer portals
+
+**For Runtime Operations | 运行时操作:**
+- VPN not required for:
+  - WeChat Work API calls (hosted in China)
+  - DingTalk API calls (hosted in China)
+  - 1688 API calls (hosted in China)
+- VPN may be required for:
+  - Amazon SP-API calls (if in China)
+  - Some npm package installations
+
+---
+
 ## Project Structure | 项目结构
 
 ```
 crossborder_seller_mcp/
 ├── server.py           # Main MCP server | 主MCP服务器
-├── test_server.py      # Test suite | 测试套件
-├── requirements.txt    # Python dependencies | Python依赖
+├── notification.py    # Notification service | 通知服务
+├── test_server.py     # Test suite | 测试套件
+├── requirements.txt   # Python dependencies | Python依赖
 ├── .env                # Environment variables | 环境变量
 ├── .env.example        # Environment template | 环境变量模板
-└── README.md           # Documentation | 文档
+├── .env.cn.example     # Chinese configuration template | 中文配置模板
+├── README.md           # Documentation (English) | 文档（英文）
+└── README_CN.md        # Documentation (Chinese) | 文档（中文）
 ```
 
 ---

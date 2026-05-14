@@ -1,0 +1,53 @@
+.sparkline-container {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.skeleton-loading {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite;
+    border-radius: 0.25rem;
+}
+
+@keyframes skeleton-shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+.trend-positive {
+    color: #22c55e;
+}
+
+.trend-negative {
+    color: #ef4444;
+}
+
+.trend-stable {
+    color: #eab308;
+}
+
+.status-good {
+    background-color: #dcfce7;
+    color: #166534;
+}
+
+.status-attention {
+    background-color: #fef9c3;
+    color: #854d0e;
+}
+
+.status-critical {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+canvas {
+    display: block;
+}

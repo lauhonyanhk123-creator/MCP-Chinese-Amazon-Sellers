@@ -1,0 +1,313 @@
+/* Mobile Responsive Styles */
+/* Breakpoints: Mobile < 640px, Tablet 640px-1024px, Desktop > 1024px */
+
+@media (max-width: 639px) {
+    /* Typography improvements for mobile */
+    html {
+        font-size: 16px;
+    }
+
+    body {
+        font-size: 1rem;
+        line-height: 1.6;
+    }
+
+    h1 { font-size: 1.75rem; }
+    h2 { font-size: 1.5rem; }
+    h3 { font-size: 1.25rem; }
+    h4 { font-size: 1.125rem; }
+
+    /* Hide desktop nav, show hamburger */
+    .desktop-nav {
+        display: none !important;
+    }
+
+    .mobile-header-btn {
+        display: flex !important;
+    }
+
+    /* Main content full width */
+    main {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    .max-w-7xl, .max-w-6xl, .max-w-3xl {
+        max-width: 100% !important;
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+
+    /* Card grid: 1 column on mobile */
+    .grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .sm\:grid-cols-2 {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Full-width cards */
+    .rounded-xl {
+        border-radius: 0.75rem;
+    }
+
+    .shadow-md, .shadow-lg {
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+    }
+
+    /* Larger touch targets (minimum 44x44px) */
+    a, button {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    .card-hover {
+        transition: none !important;
+    }
+
+    .card-hover:hover {
+        transform: none !important;
+    }
+
+    /* Forms full width */
+    input, select, textarea {
+        font-size: 16px !important;
+    }
+
+    /* Bottom sheet modals */
+    .modal-overlay {
+        position: fixed !important;
+        top: auto !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        border-radius: 1rem 1rem 0 0 !important;
+        max-height: 90vh !important;
+        overflow-y: auto !important;
+    }
+
+    /* Sparklines smaller on mobile */
+    canvas[id^="sparkline"] {
+        width: 60px !important;
+        height: 24px !important;
+    }
+
+    /* Footer */
+    footer {
+        margin-top: 2rem;
+        padding: 1rem;
+    }
+
+    footer p {
+        font-size: 0.75rem;
+    }
+
+    /* Hero section */
+    .text-4xl {
+        font-size: 2rem !important;
+    }
+
+    .text-xl {
+        font-size: 1.125rem !important;
+    }
+
+    .text-center {
+        text-align: left;
+    }
+
+    /* Icon containers smaller */
+    .w-14, .w-12, .w-10 {
+        width: 2.5rem !important;
+        height: 2.5rem !important;
+    }
+
+    /* Quick actions grid */
+    .grid-cols-1.md\:grid-cols-2.lg\:grid-cols-5 {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Feature cards */
+    .md\:grid-cols-3 {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Mobile menu styles */
+    .mobile-menu {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: white;
+        z-index: 100;
+        padding: 1rem;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease-in-out;
+    }
+
+    .mobile-menu.active {
+        transform: translateX(0);
+    }
+
+    .mobile-menu-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 99;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease-in-out;
+    }
+
+    .mobile-menu-overlay.active {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .mobile-menu a {
+        display: flex;
+        align-items: center;
+        padding: 1rem;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 1.125rem;
+    }
+
+    /* Language switcher mobile */
+    .flex.space-x-2 {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+}
+
+/* Tablet styles */
+@media (min-width: 640px) and (max-width: 1023px) {
+    /* Grid: 2 columns on tablet */
+    .sm\:grid-cols-2 {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    .grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    .lg\:grid-cols-4 {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    .lg\:grid-cols-5 {
+        grid-template-columns: repeat(3, 1fr) !important;
+    }
+
+    /* Hide hamburger on tablet */
+    .mobile-header-btn {
+        display: none !important;
+    }
+
+    .desktop-nav {
+        display: flex !important;
+    }
+
+    /* Sparklines normal size on tablet */
+    canvas[id^="sparkline"] {
+        width: 80px !important;
+        height: 30px !important;
+    }
+}
+
+/* Desktop styles (1024px+) */
+@media (min-width: 1024px) {
+    /* Grid: 4 columns on desktop */
+    .lg\:grid-cols-4 {
+        grid-template-columns: repeat(4, 1fr) !important;
+    }
+
+    .lg\:grid-cols-5 {
+        grid-template-columns: repeat(5, 1fr) !important;
+    }
+
+    /* Hide hamburger on desktop */
+    .mobile-header-btn {
+        display: none !important;
+    }
+
+    .desktop-nav {
+        display: flex !important;
+    }
+
+    /* Mobile menu hidden */
+    .mobile-menu, .mobile-menu-overlay {
+        display: none !important;
+    }
+}
+
+/* Touch-friendly improvements */
+@media (hover: none) and (pointer: coarse) {
+    /* Disable hover effects on touch devices */
+    .card-hover:hover {
+        transform: none !important;
+        box-shadow: inherit !important;
+    }
+
+    .hover\:bg-gray-100:hover {
+        background-color: inherit !important;
+    }
+
+    .hover\:bg-purple-200:hover {
+        background-color: inherit !important;
+    }
+
+    .hover\:border-purple-300:hover {
+        border-color: inherit !important;
+    }
+
+    /* Increase spacing between interactive elements */
+    .space-y-3 > * + * {
+        margin-top: 0.75rem;
+    }
+
+    /* Better touch feedback */
+    a:active, button:active {
+        opacity: 0.7;
+    }
+}
+
+/* Mobile menu language switcher */
+@media (max-width: 639px) {
+    .mobile-menu .lang-switch {
+        display: flex;
+        gap: 0.5rem;
+        padding: 1rem;
+    }
+
+    .mobile-menu .lang-switch a {
+        flex: 1;
+        justify-content: center;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.5rem;
+    }
+}
+
+/* Date range buttons on analytics - stack on mobile */
+@media (max-width: 639px) {
+    .flex.space-x-2 {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.5rem !important;
+    }
+
+    .flex.space-x-2 a {
+        width: 100% !important;
+        text-align: center !important;
+    }
+}
+
+/* Chart containers responsive */
+@media (max-width: 639px) {
+    .chart-container {
+        height: 200px !important;
+    }
+}

@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+<style>
+    .schedule-type-badge {
+        @apply px-2 py-1 text-xs font-semibold rounded;
+    }
+    .schedule-type-interval {
+        @apply bg-blue-100 text-blue-700;
+    }
+    .schedule-type-cron {
+        @apply bg-purple-100 text-purple-700;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
+        <div>
+            <h2 class="text-2xl sm:text-3xl font-bold text-gray-900">{{ get_text('schedule_management') }}</h2>
+            <p class="text-gray-600 mt-1 text-sm sm:text-base">
+                {{ get_text('schedule_desc') }}
+            </p>
+        </div>
+        <a href="/schedule/new?lang={{ lang }}" class="inline-flex items-center px-4 py-2 sm:py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm sm:text-base w-full sm:w-auto justify-center shadow-md">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            {{ get_text('create_schedule') }}
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-10 h-10 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg flex items-center justify-center">
+                    <span class="text-white text-lg">📋</span>
+                </div>
+                <span class="px-2 py-1 text-xs font-semibold bg-purple-100 text-purple-700 rounded-full">{{ active_count }}</span>
+            </div>
+            <p class="text-sm text-gray-600 mb-1">{{ get_text('schedule_active') }}</p>
+            <p class="text-2xl font-bold text-gray-900">{{ active_count }}</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg flex items-center justify-center">
+                    <span class="text-white text-lg">✓</span>
+                </div>
+                <span class="px-2 py-1 text-xs font-semibold bg-green-100 text-green-700 rounded-full">{{ paused_count }}</span>
+            </div>
+            <p class="text-sm text-gray-600 mb-1">{{ get_text('schedule_paused') }}</p>
+            <p class="text-2xl font-bold text-gray-900">{{ paused_count }}</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center">
+                    <span class="text-white text-lg">⟳</span>
+                </div>
+                <span class="px-2 py-1 text-xs font-semibold bg-blue-100 text-blue-700 rounded-full">{{ total_runs }}</span>
+            </div>
+            <p class="text-sm text-gray-600 mb-1">{{ get_text('schedule_total_runs') }}</p>
+            <p class="text-2xl font-bold text-gray-900">{{ total_runs }}</p>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 mb-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">{{ get_text('available_task_templates') }}</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {% for template in task_templates %}
+            <a href="/schedule/new?lang={{ lang }}&task_type={{ template.id }}" class="flex items-center p-3 rounded-lg border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-colors">
+                <div class="w-10 h-10 bg-gradient-to-r {{ template.color }} rounded-lg flex items-center justify-center mr-3 flex-shrink-0">
+                    <span class="text-white">{{ template.icon }}</span>
+                </div>
+                <div>
+                    <h4 class="font-medium text-gray-900 text-sm">{{ template.name }}</h4>
+                    <p class="text-xs text-gray-500">{{ template.description }}</p>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if schedules %}
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-semibold text-gray-900">{{ get_text('scheduled_tasks') }}</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ get_text('task_name') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ get_text('schedule_type') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ get_text('schedule') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ get_text('next_run') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ get_text('last_run') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ get_text('status') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ get_text('actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for schedule in schedules %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center">
+                                <span class="text-lg mr-2">{{ schedule.icon }}</span>
+                                <span class="font-medium text-gray-900">{{ schedule.name }}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="schedule-type-badge {% if schedule.schedule_type == 'interval' %}schedule-type-interval{% else %}schedule-type-cron{% endif %}">
+                                {{ get_text(schedule.schedule_type) }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="text-sm text-gray-900 font-mono">{{ schedule.schedule_display }}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {% if schedule.next_run %}
+                                {{ schedule.next_run }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {% if schedule.last_run %}
+                                {{ schedule.last_run }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 py-1 text-xs font-semibold rounded-full {% if schedule.enabled %}bg-green-100 text-green-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                                {{ get_text('active') if schedule.enabled else get_text('paused') }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <a href="/schedule/{{ schedule.id }}/edit?lang={{ lang }}" class="text-purple-600 hover:text-purple-800 mr-3">{{ get_text('edit') }}</a>
+                            <button onclick="toggleSchedule('{{ schedule.id }}')" class="mr-3 {% if schedule.enabled %}text-orange-600 hover:text-orange-800{% else %}text-green-600 hover:text-green-800{% endif %}">
+                                {{ get_text('toggle') }}
+                            </button>
+                            <button onclick="deleteSchedule('{{ schedule.id }}')" class="text-red-600 hover:text-red-800">{{ get_text('delete') }}</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 p-12 text-center">
+        <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">{{ get_text('no_schedules') }}</h3>
+        <p class="text-gray-500 mb-6">{{ get_text('no_schedules_desc') }}</p>
+        <a href="/schedule/new?lang={{ lang }}" class="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            {{ get_text('create_schedule') }}
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function toggleSchedule(scheduleId) {
+    fetch('/schedule/' + scheduleId + '/toggle', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Failed to toggle schedule');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to toggle schedule');
+    });
+}
+
+function deleteSchedule(scheduleId) {
+    const message = '{{ get_text("confirm_delete") }}';
+    if (confirm(message)) {
+        fetch('/schedule/' + scheduleId + '/delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert(data.error || 'Failed to delete schedule');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to delete schedule');
+        });
+    }
+}
+</script>
+{% endblock %}

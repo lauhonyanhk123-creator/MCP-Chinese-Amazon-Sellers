@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+
+{% block title %}{{ get_text('quickstart_title') }} - {{ get_text('title') }}{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">{{ get_text('quickstart_title') }}</h1>
+        <p class="text-gray-600 mt-2">{{ get_text('quickstart_subtitle') }}</p>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
+        <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+            <span class="w-8 h-8 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg flex items-center justify-center mr-3">
+                <span class="text-white">🔐</span>
+            </span>
+            {{ get_text('auth_title') }}
+        </h2>
+        
+        <div class="space-y-4">
+            <div>
+                <h3 class="font-semibold text-gray-800 mb-2">{{ get_text('auth_method_1_title') }}</h3>
+                <p class="text-sm text-gray-600 mb-3">{{ get_text('auth_method_1_desc') }}</p>
+                <div class="bg-gray-50 rounded-lg p-4 font-mono text-sm overflow-x-auto">
+                    <div class="text-gray-500 mb-2"># {{ get_text('request_headers') }}</div>
+                    <div>Cookie: session_id=your_session_id_here</div>
+                </div>
+            </div>
+
+            <div class="border-t border-gray-200 pt-4">
+                <h3 class="font-semibold text-gray-800 mb-2">{{ get_text('auth_method_2_title') }}</h3>
+                <p class="text-sm text-gray-600 mb-3">{{ get_text('auth_method_2_desc') }}</p>
+                <div class="bg-gray-50 rounded-lg p-4 font-mono text-sm overflow-x-auto">
+                    <div class="text-gray-500 mb-2"># {{ get_text('request_headers') }}</div>
+                    <div>X-API-Key: your_api_key_here</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
+        <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+            <span class="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-lg flex items-center justify-center mr-3">
+                <span class="text-white">🌐</span>
+            </span>
+            {{ get_text('base_url_title') }}
+        </h2>
+        
+        <div class="bg-gray-50 rounded-lg p-4 font-mono text-sm mb-4">
+            <div class="text-purple-600">https://your-domain.com/api</div>
+        </div>
+
+        <h3 class="font-semibold text-gray-800 mb-3">{{ get_text('common_headers') }}</h3>
+        <div class="bg-gray-50 rounded-lg p-4 font-mono text-sm overflow-x-auto">
+            <div>Content-Type: application/json</div>
+            <div>Accept: application/json</div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
+        <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+            <span class="w-8 h-8 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg flex items-center justify-center mr-3">
+                <span class="text-white">📋</span>
+            </span>
+            {{ get_text('use_case_1_title') }}
+        </h2>
+        
+        <p class="text-gray-600 mb-4">{{ get_text('use_case_1_desc') }}</p>
+
+        <div class="flex flex-wrap gap-2 mb-4">
+            <button onclick="showCode('list-tools-python')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors" id="btn-list-tools-python">Python</button>
+            <button onclick="showCode('list-tools-javascript')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors" id="btn-list-tools-javascript">JavaScript</button>
+            <button onclick="showCode('list-tools-curl')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors" id="btn-list-tools-curl">cURL</button>
+        </div>
+
+        <div id="code-list-tools-python" class="code-block hidden">
+            <div class="bg-gray-900 rounded-lg p-4 text-gray-100 font-mono text-sm overflow-x-auto">
+<pre>import requests
+
+BASE_URL = "https://your-domain.com/api"
+
+response = requests.get(
+    f"{BASE_URL}/tools",
+    headers={"X-API-Key": "your_api_key"}
+)
+tools = response.json()
+for tool in tools["tools"]:
+    print(f"- {tool['name']}: {tool['description']}")</pre>
+            </div>
+        </div>
+
+        <div id="code-list-tools-javascript" class="code-block hidden">
+            <div class="bg-gray-900 rounded-lg p-4 text-gray-100 font-mono text-sm overflow-x-auto">
+<pre>const BASE_URL = "https://your-domain.com/api";
+
+const response = await fetch(\`\${BASE_URL}/tools\`, {
+    headers: {
+        "X-API-Key": "your_api_key"
+    }
+});
+const data = await response.json();
+data.tools.forEach(tool => {
+    console.log(\`- \${tool.name}: \${tool.description}\`);
+});</pre>
+            </div>
+        </div>
+
+        <div id="code-list-tools-curl" class="code-block hidden">
+            <div class="bg-gray-900 rounded-lg p-4 text-gray-100 font-mono text-sm overflow-x-auto">
+<pre>curl -X GET "https://your-domain.com/api/tools" \
+  -H "X-API-Key: your_api_key"</pre>
+            </div>
+        </div>
+
+        <h4 class="font-semibold text-gray-700 mt-4 mb-2">{{ get_text('example_response') }}</h4>
+        <div class="bg-gray-50 rounded-lg p-4 font-mono text-sm overflow-x-auto">
+<pre>{
+  "success": true,
+  "tools": [
+    {
+      "name": "get_inventory",
+      "description": "Get current inventory levels",
+      "parameters": ["sku", "warehouse"]
+    },
+    {
+      "name": "get_orders",
+      "description": "Retrieve order information",
+      "parameters": ["status", "date_range"]
+    }
+  ],
+  "count": 2
+}</pre>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
+        <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+            <span class="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center mr-3">
+                <span class="text-white">⚡</span>
+            </span>
+            {{ get_text('use_case_2_title') }}
+        </h2>
+        
+        <p class="text-gray-600 mb-4">{{ get_text('use_case_2_desc') }}</p>
+
+        <div class="flex flex-wrap gap-2 mb-4">
+            <button onclick="showCode('call-tool-python')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors" id="btn-call-tool-python">Python</button>
+            <button onclick="showCode('call-tool-javascript')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors" id="btn-call-tool-javascript">JavaScript</button>
+            <button onclick="showCode('call-tool-curl')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors" id="btn-call-tool-curl">cURL</button>
+        </div>
+
+        <div id="code-call-tool-python" class="code-block hidden">
+            <div class="bg-gray-900 rounded-lg p-4 text-gray-100 font-mono text-sm overflow-x-auto">
+<pre>import requests
+
+BASE_URL = "https://your-domain.com/api"
+
+response = requests.post(
+    f"{BASE_URL}/tools/get_inventory",
+    headers={
+        "X-API-Key": "your_api_key",
+        "Content-Type": "application/json"
+    },
+    json={"sku": "PROD-12345", "warehouse": "US-WEST"}
+)
+result = response.json()
+print(result["data"])</pre>
+            </div>
+        </div>
+
+        <div id="code-call-tool-javascript" class="code-block hidden">
+            <div class="bg-gray-900 rounded-lg p-4 text-gray-100 font-mono text-sm overflow-x-auto">
+<pre>const BASE_URL = "https://your-domain.com/api";
+
+const response = await fetch(\`\${BASE_URL}/tools/get_inventory\`, {
+    method: "POST",
+    headers: {
+        "X-API-Key": "your_api_key",
+        "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+        sku: "PROD-12345",
+        warehouse: "US-WEST"
+    })
+});
+const result = await response.json();
+console.log(result.data);</pre>
+            </div>
+        </div>
+
+        <div id="code-call-tool-curl" class="code-block hidden">
+            <div class="bg-gray-900 rounded-lg p-4 text-gray-100 font-mono text-sm overflow-x-auto">
+<pre>curl -X POST "https://your-domain.com/api/tools/get_inventory" \
+  -H "X-API-Key: your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{"sku": "PROD-12345", "warehouse": "US-WEST"}'</pre>
+            </div>
+        </div>
+
+        <h4 class="font-semibold text-gray-700 mt-4 mb-2">{{ get_text('example_response') }}</h4>
+        <div class="bg-gray-50 rounded-lg p-4 font-mono text-sm overflow-x-auto">
+<pre>{
+  "success": true,
+  "task_id": "task_abc123",
+  "status": "completed",
+  "data": {
+    "sku": "PROD-12345",
+    "quantity": 150,
+    "warehouse": "US-WEST",
+    "last_updated": "2024-01-15T10:30:00Z"
+  }
+}</pre>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
+        <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+            <span class="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center mr-3">
+                <span class="text-white">📤</span>
+            </span>
+            {{ get_text('use_case_3_title') }}
+        </h2>
+        
+        <p class="text-gray-600 mb-4">{{ get_text('use_case_3_desc') }}</p>
+
+        <div class="flex flex-wrap gap-2 mb-4">
+            <button onclick="showCode('export-python')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors" id="btn-export-python">Python</button>
+            <button onclick="showCode('export-javascript')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors" id="btn-export-javascript">JavaScript</button>
+            <button onclick="showCode('export-curl')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors" id="btn-export-curl">cURL</button>
+        </div>
+
+        <div id="code-export-python" class="code-block hidden">
+            <div class="bg-gray-900 rounded-lg p-4 text-gray-100 font-mono text-sm overflow-x-auto">
+<pre>import requests
+
+BASE_URL = "https://your-domain.com/api"
+
+response = requests.get(
+    f"{BASE_URL}/export/inventory",
+    headers={"X-API-Key": "your_api_key"},
+    params={"format": "csv", "include_variants": "true"}
+)
+
+with open("inventory_export.csv", "wb") as f:
+    f.write(response.content)
+print("Exported inventory.csv")</pre>
+            </div>
+        </div>
+
+        <div id="code-export-javascript" class="code-block hidden">
+            <div class="bg-gray-900 rounded-lg p-4 text-gray-100 font-mono text-sm overflow-x-auto">
+<pre>const BASE_URL = "https://your-domain.com/api";
+
+const response = await fetch(
+    \`\${BASE_URL}/export/inventory?format=csv&include_variants=true\`,
+    {
+        headers: { "X-API-Key": "your_api_key" }
+    }
+);
+const blob = await response.blob();
+const url = window.URL.createObjectURL(blob);
+const a = document.createElement("a");
+a.href = url;
+a.download = "inventory_export.csv";
+a.click();</pre>
+            </div>
+        </div>
+
+        <div id="code-export-curl" class="code-block hidden">
+            <div class="bg-gray-900 rounded-lg p-4 text-gray-100 font-mono text-sm overflow-x-auto">
+<pre>curl -X GET "https://your-domain.com/api/export/inventory?format=csv" \
+  -H "X-API-Key: your_api_key" \
+  -o inventory_export.csv</pre>
+            </div>
+        </div>
+
+        <h4 class="font-semibold text-gray-700 mt-4 mb-2">{{ get_text('example_response') }}</h4>
+        <div class="bg-gray-50 rounded-lg p-4 font-mono text-sm overflow-x-auto">
+<pre>HTTP/1.1 200 OK
+Content-Type: text/csv
+Content-Disposition: attachment; filename="inventory_export.csv"
+
+sku,product_name,quantity,warehouse,last_updated
+PROD-12345,Widget A,150,US-WEST,2024-01-15T10:30:00Z
+PROD-67890,Widget B,75,US-EAST,2024-01-15T09:45:00Z</pre>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 p-6">
+        <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+            <span class="w-8 h-8 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-lg flex items-center justify-center mr-3">
+                <span class="text-white">🔧</span>
+            </span>
+            {{ get_text('error_handling_title') }}
+        </h2>
+        
+        <p class="text-gray-600 mb-4">{{ get_text('error_handling_desc') }}</p>
+
+        <h4 class="font-semibold text-gray-700 mb-2">{{ get_text('common_errors') }}</h4>
+        <div class="space-y-3">
+            <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+                <div class="font-mono text-sm text-red-700 font-semibold">401 Unauthorized</div>
+                <div class="text-sm text-red-600 mt-1">{{ get_text('error_401') }}</div>
+            </div>
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <div class="font-mono text-sm text-yellow-700 font-semibold">429 Rate Limited</div>
+                <div class="text-sm text-yellow-600 mt-1">{{ get_text('error_429') }}</div>
+            </div>
+            <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+                <div class="font-mono text-sm text-red-700 font-semibold">500 Internal Error</div>
+                <div class="text-sm text-red-600 mt-1">{{ get_text('error_500') }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showCode(id) {
+    document.querySelectorAll('.code-block').forEach(el => el.classList.add('hidden'));
+    document.getElementById(id).classList.remove('hidden');
+    
+    const btnId = 'btn-' + id.replace(/-/g, '-');
+    document.querySelectorAll('[id^="btn-"]').forEach(btn => {
+        btn.classList.remove('bg-purple-100', 'text-purple-700');
+        btn.classList.add('bg-gray-100');
+    });
+    
+    const activeBtn = document.getElementById('btn-' + id);
+    if (activeBtn) {
+        activeBtn.classList.remove('bg-gray-100');
+        activeBtn.classList.add('bg-purple-100', 'text-purple-700');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    showCode('list-tools-python');
+});
+</script>
+{% endblock %}

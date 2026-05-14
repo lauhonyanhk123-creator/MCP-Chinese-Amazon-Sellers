@@ -1,0 +1,769 @@
+{% extends "base.html" %}
+
+{% block title %}{{ get_text('audit_logs') }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .audit-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .audit-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+
+    .audit-title {
+        font-size: 28px;
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .audit-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .btn {
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-secondary {
+        background: #f3f4f6;
+        color: #374151;
+    }
+
+    .btn-secondary:hover {
+        background: #e5e7eb;
+    }
+
+    .filters-section {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 24px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .filters-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .filter-label {
+        font-size: 13px;
+        font-weight: 500;
+        color: #6b7280;
+    }
+
+    .filter-input, .filter-select {
+        padding: 10px 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: border-color 0.2s;
+    }
+
+    .filter-input:focus, .filter-select:focus {
+        outline: none;
+        border-color: #667eea;
+    }
+
+    .filters-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+    }
+
+    .stats-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 12px;
+        text-align: center;
+    }
+
+    .stat-card.secondary {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    }
+
+    .stat-card.success {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+
+    .stat-card.warning {
+        background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+    }
+
+    .stat-value {
+        font-size: 32px;
+        font-weight: 700;
+    }
+
+    .stat-label {
+        font-size: 13px;
+        opacity: 0.9;
+        margin-top: 4px;
+    }
+
+    .logs-table-container {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .logs-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .logs-table th {
+        background: #f9fafb;
+        padding: 14px 16px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 13px;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .logs-table td {
+        padding: 14px 16px;
+        border-bottom: 1px solid #f3f4f6;
+        font-size: 14px;
+    }
+
+    .logs-table tr:hover {
+        background: #f9fafb;
+    }
+
+    .log-id {
+        font-family: monospace;
+        font-size: 12px;
+        color: #9ca3af;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .action-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .action-CREATE { background: #d1fae5; color: #065f46; }
+    .action-READ { background: #dbeafe; color: #1e40af; }
+    .action-UPDATE { background: #fef3c7; color: #92400e; }
+    .action-DELETE { background: #fee2e2; color: #991b1b; }
+    .action-LOGIN { background: #e0e7ff; color: #3730a3; }
+    .action-LOGOUT { background: #f3f4f6; color: #374151; }
+    .action-EXPORT { background: #d1fae5; color: #065f46; }
+    .action-PRICE_CHANGE { background: #fef3c7; color: #92400e; }
+    .action-INVENTORY_UPDATE { background: #ccfbf1; color: #115e59; }
+    .action-ADMIN_ACTION { background: #fce7f3; color: #9d174d; }
+    .action-default { background: #f3f4f6; color: #374151; }
+
+    .resource-badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        background: #f3f4f6;
+        color: #4b5563;
+    }
+
+    .timestamp {
+        font-size: 13px;
+        color: #6b7280;
+    }
+
+    .relative-time {
+        font-size: 12px;
+        color: #9ca3af;
+    }
+
+    .details-cell {
+        max-width: 300px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .details-preview {
+        font-family: monospace;
+        font-size: 12px;
+        color: #6b7280;
+        background: #f9fafb;
+        padding: 4px 8px;
+        border-radius: 4px;
+    }
+
+    .ip-address {
+        font-family: monospace;
+        font-size: 12px;
+        color: #6b7280;
+    }
+
+    .user-id {
+        font-weight: 500;
+        color: #374151;
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        background: #f9fafb;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    .pagination-info {
+        font-size: 14px;
+        color: #6b7280;
+    }
+
+    .pagination-controls {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .pagination-btn {
+        padding: 8px 16px;
+        border: 1px solid #e5e7eb;
+        background: white;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s;
+    }
+
+    .pagination-btn:hover:not(:disabled) {
+        background: #f3f4f6;
+        border-color: #d1d5db;
+    }
+
+    .pagination-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .pagination-btn.active {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #9ca3af;
+    }
+
+    .empty-icon {
+        font-size: 48px;
+        margin-bottom: 16px;
+    }
+
+    .timeline-section {
+        margin-top: 24px;
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .timeline-title {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 16px;
+        color: #1f2937;
+    }
+
+    .timeline {
+        position: relative;
+        padding-left: 30px;
+    }
+
+    .timeline::before {
+        content: '';
+        position: absolute;
+        left: 8px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #e5e7eb;
+    }
+
+    .timeline-item {
+        position: relative;
+        padding-bottom: 20px;
+    }
+
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: -26px;
+        top: 4px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #667eea;
+        border: 2px solid white;
+    }
+
+    .timeline-time {
+        font-size: 12px;
+        color: #9ca3af;
+        margin-bottom: 4px;
+    }
+
+    .timeline-content {
+        font-size: 14px;
+        color: #374151;
+    }
+
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .modal.active {
+        display: flex;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 12px;
+        max-width: 600px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+        padding: 24px;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .modal-title {
+        font-size: 20px;
+        font-weight: 600;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: #6b7280;
+    }
+
+    .detail-row {
+        display: flex;
+        padding: 12px 0;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    .detail-label {
+        flex: 0 0 140px;
+        font-weight: 500;
+        color: #6b7280;
+        font-size: 13px;
+    }
+
+    .detail-value {
+        flex: 1;
+        color: #1f2937;
+        font-size: 14px;
+        word-break: break-all;
+    }
+
+    .json-details {
+        background: #1f2937;
+        color: #e5e7eb;
+        padding: 16px;
+        border-radius: 8px;
+        font-family: monospace;
+        font-size: 12px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="audit-container">
+    <div class="audit-header">
+        <h1 class="audit-title">{{ get_text('audit_logs') }}</h1>
+        <div class="audit-actions">
+            <button class="btn btn-secondary" onclick="exportLogs('csv')">
+                {{ get_text('export_csv') }}
+            </button>
+            <button class="btn btn-secondary" onclick="exportLogs('json')">
+                {{ get_text('export_json') }}
+            </button>
+            <button class="btn btn-primary" onclick="openTimeline()">
+                {{ get_text('view_timeline') }}
+            </button>
+        </div>
+    </div>
+
+    <div class="filters-section">
+        <form method="GET" action="/audit-logs" id="filterForm">
+            <div class="filters-grid">
+                <div class="filter-group">
+                    <label class="filter-label">{{ get_text('audit_user') }}</label>
+                    <input type="text" name="user" class="filter-input" 
+                           value="{{ user_filter }}" placeholder="{{ get_text('filter_by_user') }}">
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">{{ get_text('audit_action') }}</label>
+                    <select name="action" class="filter-select">
+                        <option value="">{{ get_text('all_actions') }}</option>
+                        {% for action in action_choices %}
+                        <option value="{{ action }}" {% if action_filter == action %}selected{% endif %}>{{ action }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">{{ get_text('audit_resource') }}</label>
+                    <select name="resource" class="filter-select">
+                        <option value="">{{ get_text('all_resources') }}</option>
+                        {% for resource in resource_choices %}
+                        <option value="{{ resource }}" {% if resource_filter == resource %}selected{% endif %}>{{ resource }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">{{ get_text('date_from') }}</label>
+                    <input type="date" name="date_from" class="filter-input" value="{{ date_from }}">
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">{{ get_text('date_to') }}</label>
+                    <input type="date" name="date_to" class="filter-input" value="{{ date_to }}">
+                </div>
+            </div>
+            <div class="filters-actions">
+                <button type="button" class="btn btn-secondary" onclick="clearFilters()">
+                    {{ get_text('clear_filters') }}
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    {{ get_text('apply_filters') }}
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="stats-cards">
+        <div class="stat-card">
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">{{ get_text('audit_logs') }}</div>
+        </div>
+        <div class="stat-card secondary">
+            <div class="stat-value">{{ page }}</div>
+            <div class="stat-label">{{ get_text('page') }} {{ get_text('of') }} {{ total_pages }}</div>
+        </div>
+        <div class="stat-card success">
+            <div class="stat-value">{{ action_choices|length }}</div>
+            <div class="stat-label">{{ get_text('audit_action') }} Types</div>
+        </div>
+        <div class="stat-card warning">
+            <div class="stat-value">{{ resource_choices|length }}</div>
+            <div class="stat-label">{{ get_text('audit_resource') }} Types</div>
+        </div>
+    </div>
+
+    <div class="logs-table-container">
+        {% if logs %}
+        <table class="logs-table">
+            <thead>
+                <tr>
+                    <th>{{ get_text('audit_timestamp') }}</th>
+                    <th>{{ get_text('audit_user') }}</th>
+                    <th>{{ get_text('audit_action') }}</th>
+                    <th>{{ get_text('audit_resource') }}</th>
+                    <th>Resource ID</th>
+                    <th>{{ get_text('audit_details') }}</th>
+                    <th>{{ get_text('audit_ip_address') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr onclick="showLogDetails('{{ log.log_id }}')" style="cursor: pointer;">
+                    <td>
+                        <div class="timestamp">{{ log.formatted_time if log.formatted_time else log.timestamp }}</div>
+                        <div class="relative-time">{{ log.relative_time if log.relative_time else '' }}</div>
+                    </td>
+                    <td>
+                        <span class="user-id">{{ log.user_id }}</span>
+                    </td>
+                    <td>
+                        <span class="action-badge action-{{ log.action if log.action in ['CREATE', 'READ', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'EXPORT', 'PRICE_CHANGE', 'INVENTORY_UPDATE', 'ADMIN_ACTION'] else 'default' }}">
+                            {{ log.action }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="resource-badge">{{ log.resource_type }}</span>
+                    </td>
+                    <td>
+                        <span class="log-id">{{ log.resource_id if log.resource_id else '-' }}</span>
+                    </td>
+                    <td>
+                        <div class="details-cell">
+                            {% if log.details %}
+                            <span class="details-preview">
+                                {{ log.details[:60] + '...' if log.details|length > 60 else log.details }}
+                            </span>
+                            {% else %}
+                            <span style="color: #9ca3af;">-</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="ip-address">{{ log.ip_address if log.ip_address else '-' }}</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">📋</div>
+            <h3>{{ get_text('no_logs_found') }}</h3>
+        </div>
+        {% endif %}
+
+        {% if logs and total_pages > 1 %}
+        <div class="pagination">
+            <div class="pagination-info">
+                {{ get_text('total_logs', total_count)|replace('X', total_count) }} - 
+                {{ get_text('page') }} {{ page }} {{ get_text('of') }} {{ total_pages }}
+            </div>
+            <div class="pagination-controls">
+                {% if page > 1 %}
+                <a href="?page={{ page - 1 }}&user={{ user_filter }}&action={{ action_filter }}&resource={{ resource_filter }}&date_from={{ date_from }}&date_to={{ date_to }}">
+                    <button class="pagination-btn">{{ get_text('previous') }}</button>
+                </a>
+                {% endif %}
+                
+                {% for p in range([1, page - 2]|max, [total_pages, page + 3]|min + 1) %}
+                <a href="?page={{ p }}&user={{ user_filter }}&action={{ action_filter }}&resource={{ resource_filter }}&date_from={{ date_from }}&date_to={{ date_to }}">
+                    <button class="pagination-btn {% if p == page %}active{% endif %}">{{ p }}</button>
+                </a>
+                {% endfor %}
+                
+                {% if page < total_pages %}
+                <a href="?page={{ page + 1 }}&user={{ user_filter }}&action={{ action_filter }}&resource={{ resource_filter }}&date_from={{ date_from }}&date_to={{ date_to }}">
+                    <button class="pagination-btn">{{ get_text('next') }}</button>
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="timeline-section" id="timelineSection" style="display: none;">
+        <h3 class="timeline-title">{{ get_text('view_timeline') }}</h3>
+        <div class="timeline" id="timelineContent">
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="logModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title">{{ get_text('log_details') }}</h2>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div id="modalBody">
+        </div>
+    </div>
+</div>
+
+<script>
+function clearFilters() {
+    window.location.href = '/audit-logs';
+}
+
+function exportLogs(format) {
+    const params = new URLSearchParams(window.location.search);
+    params.set('format', format);
+    window.location.href = '/api/audit-logs/export?' + params.toString();
+}
+
+async function showLogDetails(logId) {
+    try {
+        const response = await fetch(`/api/audit-logs?limit=1&offset=0`);
+        const data = await response.json();
+        
+        const log = data.logs.find(l => l.log_id === logId) || {
+            log_id: logId,
+            user_id: 'Unknown',
+            action: 'Unknown',
+            resource_type: 'Unknown',
+            resource_id: null,
+            details: null,
+            ip_address: null,
+            user_agent: null,
+            timestamp: new Date().toISOString()
+        };
+        
+        const modal = document.getElementById('logModal');
+        const body = document.getElementById('modalBody');
+        
+        body.innerHTML = `
+            <div class="detail-row">
+                <div class="detail-label">Log ID</div>
+                <div class="detail-value"><code>${log.log_id}</code></div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">{{ get_text('audit_timestamp') }}</div>
+                <div class="detail-value">${log.timestamp}</div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">{{ get_text('audit_user') }}</div>
+                <div class="detail-value">${log.user_id}</div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">{{ get_text('audit_action') }}</div>
+                <div class="detail-value"><span class="action-badge action-${log.action || 'default'}">${log.action}</span></div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">{{ get_text('audit_resource') }}</div>
+                <div class="detail-value">${log.resource_type}</div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">Resource ID</div>
+                <div class="detail-value">${log.resource_id || '-'}</div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">{{ get_text('audit_ip_address') }}</div>
+                <div class="detail-value"><code>${log.ip_address || '-'}</code></div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">User Agent</div>
+                <div class="detail-value" style="font-size: 12px; word-break: break-all;">${log.user_agent || '-'}</div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">{{ get_text('audit_details') }}</div>
+                <div class="detail-value">
+                    ${log.details ? '<div class="json-details">' + JSON.stringify(log.details, null, 2) + '</div>' : '-'}</div>
+            </div>
+        `;
+        
+        modal.classList.add('active');
+    } catch (error) {
+        console.error('Error loading log details:', error);
+    }
+}
+
+function closeModal() {
+    document.getElementById('logModal').classList.remove('active');
+}
+
+async function openTimeline() {
+    const section = document.getElementById('timelineSection');
+    const content = document.getElementById('timelineContent');
+    
+    if (section.style.display === 'none') {
+        section.style.display = 'block';
+        
+        try {
+            const response = await fetch('/api/audit-logs?limit=20');
+            const data = await response.json();
+            
+            if (data.logs && data.logs.length > 0) {
+                content.innerHTML = data.logs.map(log => `
+                    <div class="timeline-item">
+                        <div class="timeline-time">${log.timestamp}</div>
+                        <div class="timeline-content">
+                            <strong>${log.user_id}</strong> performed <strong>${log.action}</strong> on ${log.resource_type}
+                            ${log.resource_id ? `(${log.resource_id})` : ''}
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                content.innerHTML = '<p style="color: #9ca3af;">No recent activity</p>';
+            }
+        } catch (error) {
+            content.innerHTML = '<p style="color: #ef4444;">Error loading timeline</p>';
+        }
+    } else {
+        section.style.display = 'none';
+    }
+}
+
+document.getElementById('logModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeModal();
+    }
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeModal();
+    }
+});
+</script>
+{% endblock %}

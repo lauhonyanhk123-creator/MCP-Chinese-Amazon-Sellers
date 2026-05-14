@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <div class="flex justify-between items-center mb-8">
+        <div>
+            <h2 class="text-3xl font-bold text-gray-900">{{ get_text('task_queue') }}</h2>
+            <p class="text-gray-600 mt-1">{{ get_text('dashboard_last_updated') }}: {{ last_updated }}</p>
+        </div>
+        <a href="/tasks?lang={{ lang }}" class="inline-flex items-center px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            {{ get_text('dashboard_refresh') }}
+        </a>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4">
+            <p class="text-sm text-gray-600 mb-1">{{ get_text('dashboard_active_tasks') }}</p>
+            <p class="text-2xl font-bold text-blue-600">{{ active_count }}</p>
+        </div>
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4">
+            <p class="text-sm text-gray-600 mb-1">{{ get_text('task_pending') }}</p>
+            <p class="text-2xl font-bold text-gray-500">{{ pending_count }}</p>
+        </div>
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4">
+            <p class="text-sm text-gray-600 mb-1">{{ get_text('task_processing') }}</p>
+            <p class="text-2xl font-bold text-blue-500">{{ running_count }}</p>
+        </div>
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4">
+            <p class="text-sm text-gray-600 mb-1">{{ get_text('task_completed') }}</p>
+            <p class="text-2xl font-bold text-green-600">{{ completed_count }}</p>
+        </div>
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4">
+            <p class="text-sm text-gray-600 mb-1">{{ get_text('task_failed') }}</p>
+            <p class="text-2xl font-bold text-red-600">{{ failed_count }}</p>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 mb-6">
+        <div class="flex items-center space-x-4">
+            <span class="text-sm text-gray-600">{{ get_text('status') }}:</span>
+            <a href="/tasks?lang={{ lang }}" class="px-3 py-1 text-sm rounded-full {% if not status_filter %}bg-purple-100 text-purple-700{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
+                All ({{ tasks|length }})
+            </a>
+            <a href="/tasks?lang={{ lang }}&status=pending" class="px-3 py-1 text-sm rounded-full {% if status_filter == 'pending' %}bg-purple-100 text-purple-700{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
+                {{ get_text('task_pending') }}
+            </a>
+            <a href="/tasks?lang={{ lang }}&status=running" class="px-3 py-1 text-sm rounded-full {% if status_filter == 'running' %}bg-purple-100 text-purple-700{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
+                {{ get_text('task_processing') }}
+            </a>
+            <a href="/tasks?lang={{ lang }}&status=completed" class="px-3 py-1 text-sm rounded-full {% if status_filter == 'completed' %}bg-purple-100 text-purple-700{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
+                {{ get_text('task_completed') }}
+            </a>
+            <a href="/tasks?lang={{ lang }}&status=failed" class="px-3 py-1 text-sm rounded-full {% if status_filter == 'failed' %}bg-purple-100 text-purple-700{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
+                {{ get_text('task_failed') }}
+            </a>
+        </div>
+    </div>
+
+    {% if tasks %}
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task ID</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tool</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progress</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for task in tasks %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="text-sm font-mono text-gray-900">{{ task.task_id }}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="text-sm font-medium text-gray-900">{{ task.tool_name }}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 py-1 text-xs font-semibold rounded-full
+                                {% if task.status == 'completed' %}bg-green-100 text-green-700
+                                {% elif task.status == 'failed' %}bg-red-100 text-red-700
+                                {% elif task.status == 'running' %}bg-blue-100 text-blue-700
+                                {% else %}bg-gray-100 text-gray-600{% endif %}">
+                                {{ get_text('task_' + task.status) }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="w-24 bg-gray-200 rounded-full h-2 mr-2">
+                                    <div class="bg-blue-500 h-2 rounded-full transition-all" style="width: {{ task.progress }}%"></div>
+                                </div>
+                                <span class="text-sm text-gray-600">{{ task.progress }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ task.created_at[:19] }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <button onclick="viewTask('{{ task.task_id }}')" class="text-purple-600 hover:text-purple-800 mr-3">View</button>
+                            <button onclick="deleteTask('{{ task.task_id }}')" class="text-red-600 hover:text-red-800">Delete</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 p-12 text-center">
+        <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+            </svg>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">{{ get_text('task_no_active') }}</h3>
+        <p class="text-gray-500">Submit a task using the API to see it here.</p>
+    </div>
+    {% endif %}
+</div>
+
+<div id="taskModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <h3 class="text-lg font-semibold text-gray-900">Task Details</h3>
+            <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <div class="p-6 overflow-y-auto max-h-[60vh]" id="taskModalContent">
+        </div>
+    </div>
+</div>
+
+<script>
+function viewTask(taskId) {
+    fetch('/api/tasks/' + taskId)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                let content = `
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-sm text-gray-500">Task ID</p>
+                                <p class="font-mono text-sm">${data.task_id}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Tool</p>
+                                <p class="font-medium">${data.tool_name}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Status</p>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full ${
+                                    data.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                    data.status === 'failed' ? 'bg-red-100 text-red-700' :
+                                    data.status === 'running' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-gray-100 text-gray-600'
+                                }">${data.status}</span>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Progress</p>
+                                <p>${data.progress}%</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Created</p>
+                                <p class="text-sm">${data.created_at || '-'}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Completed</p>
+                                <p class="text-sm">${data.completed_at || '-'}</p>
+                            </div>
+                        </div>
+                        ${data.result ? `
+                            <div>
+                                <p class="text-sm text-gray-500 mb-2">Result</p>
+                                <pre class="bg-gray-50 p-4 rounded-lg text-xs overflow-x-auto">${JSON.stringify(JSON.parse(data.result), null, 2)}</pre>
+                            </div>
+                        ` : ''}
+                        ${data.error ? `
+                            <div>
+                                <p class="text-sm text-gray-500 mb-2">Error</p>
+                                <pre class="bg-red-50 p-4 rounded-lg text-xs text-red-700 overflow-x-auto">${data.error}</pre>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+                document.getElementById('taskModalContent').innerHTML = content;
+                document.getElementById('taskModal').classList.remove('hidden');
+            }
+        });
+}
+
+function closeModal() {
+    document.getElementById('taskModal').classList.add('hidden');
+}
+
+function deleteTask(taskId) {
+    if (confirm('Are you sure you want to delete this task?')) {
+        fetch('/api/tasks/' + taskId, { method: 'DELETE' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                }
+            });
+    }
+}
+
+document.getElementById('taskModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeModal();
+    }
+});
+</script>
+{% endblock %}

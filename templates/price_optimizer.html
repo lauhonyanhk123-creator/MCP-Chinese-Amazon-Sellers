@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+
+{% block title %}{{ get_text('price_optimizer_page_title') }} - {{ get_text('title') }}{% endblock %}
+
+{% block extra_head %}
+<style>
+.price-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.price-range-bar {
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #10b981 0%, #3b82f6 50%, #ef4444 100%);
+    position: relative;
+    margin: 1rem 0;
+}
+
+.price-marker {
+    position: absolute;
+    top: -4px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: white;
+    border: 3px solid #667eea;
+    transform: translateX(-50%);
+}
+
+.strategy-btn {
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    border: 2px solid #e5e7eb;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+.strategy-btn:hover {
+    border-color: #667eea;
+    background: #f5f3ff;
+}
+
+.strategy-btn.active {
+    border-color: #667eea;
+    background: #667eea;
+    color: white;
+}
+
+.threat-card {
+    border-left: 4px solid;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    border-radius: 0 8px 8px 0;
+    background: #f9fafb;
+}
+
+.threat-card.critical {
+    border-left-color: #ef4444;
+}
+
+.threat-card.high {
+    border-left-color: #f59e0b;
+}
+
+.threat-card.medium {
+    border-left-color: #3b82f6;
+}
+
+.competitor-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 1rem;
+    padding: 0.75rem;
+    border-bottom: 1px solid #e5e7eb;
+    align-items: center;
+}
+
+.competitor-row:last-child {
+    border-bottom: none;
+}
+
+.metric-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.metric-badge.green {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.metric-badge.yellow {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.metric-badge.red {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.metric-badge.blue {
+    background: #dbeafe;
+    color: #2563eb;
+}
+
+.action-btn {
+    padding: 0.625rem 1.25rem;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+}
+
+.action-btn.primary {
+    background: #667eea;
+    color: white;
+}
+
+.action-btn.primary:hover {
+    background: #5a67d8;
+}
+
+.action-btn.secondary {
+    background: white;
+    border: 1px solid #d1d5db;
+    color: #374151;
+}
+
+.action-btn.secondary:hover {
+    background: #f3f4f6;
+}
+
+.input-field {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+}
+
+.input-field:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+@media (max-width: 768px) {
+    .competitor-row {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+    }
+    
+    .competitor-row > *:nth-child(3),
+    .competitor-row > *:nth-child(4) {
+        grid-column: span 1;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">{{ get_text('price_optimization') }}</h1>
+        <p class="text-gray-600">{{ get_text('competitor_analysis') }} | {{ get_text('margin_analysis') }}</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div class="lg:col-span-2">
+            <div class="price-card">
+                <h2 class="text-lg font-semibold mb-4">{{ get_text('price_recommendation') }}</h2>
+                
+                <form method="get" class="space-y-4 mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">{{ get_text('enter_sku') }}</label>
+                            <input type="text" name="sku" value="{{ sku }}" placeholder="SKU-12345" class="input-field">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">{{ get_text('target_margin') }} (%)</label>
+                            <input type="number" name="margin" value="25" placeholder="25" class="input-field">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">{{ get_text('price_strategy') }}</label>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="submit" name="strategy" value="aggressive" class="strategy-btn {% if strategy == 'aggressive' %}active{% endif %}">
+                                {{ get_text('aggressive') }}
+                            </button>
+                            <button type="submit" name="strategy" value="balanced" class="strategy-btn {% if strategy == 'balanced' %}active{% endif %}">
+                                {{ get_text('balanced') }}
+                            </button>
+                            <button type="submit" name="strategy" value="premium" class="strategy-btn {% if strategy == 'premium' %}active{% endif %}">
+                                {{ get_text('premium') }}
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="action-btn primary w-full md:w-auto">
+                        {{ get_text('calculate') }}
+                    </button>
+                </form>
+
+                {% if recommendation %}
+                <div class="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-6 mb-6">
+                    <div class="text-center mb-4">
+                        <p class="text-sm text-gray-600 mb-1">{{ get_text('recommended_price') }}</p>
+                        <p class="text-4xl font-bold text-purple-700">${{ "%.2f"|format(recommendation.recommended_price if recommendation.recommended_price else recommendation.recommended_price) }}</p>
+                        {% if recommendation.action %}
+                        <span class="metric-badge {% if recommendation.action == 'MAINTAIN' %}green{% elif recommendation.action == 'INCREASE' %}blue{% else %}yellow{% endif %} mt-2">
+                            {{ recommendation.action }}
+                        </span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="price-range-bar">
+                        <div class="price-marker" style="left: 25%;" title="{{ get_text('min_price') }}: ${{ "%.2f"|format(recommendation.price_range.minimum if recommendation.price_range.minimum else 0) }}">
+                        </div>
+                        <div class="price-marker" style="left: 50%;" title="{{ get_text('optimal_price') }}: ${{ "%.2f"|format(recommendation.price_range.recommended if recommendation.price_range.recommended else recommendation.recommended_price) }}">
+                        </div>
+                        <div class="price-marker" style="left: 75%;" title="{{ get_text('max_price') }}: ${{ "%.2f"|format(recommendation.price_range.maximum if recommendation.price_range.maximum else 0) }}">
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-between text-xs text-gray-600 mt-2">
+                        <span>{{ get_text('min_price') }}: ${{ "%.2f"|format(recommendation.price_range.minimum if recommendation.price_range.minimum else 0) }}</span>
+                        <span>{{ get_text('optimal_price') }}</span>
+                        <span>{{ get_text('max_price') }}: ${{ "%.2f"|format(recommendation.price_range.maximum if recommendation.price_range.maximum else 0) }}</span>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-gray-50 rounded-lg p-4 text-center">
+                        <p class="text-sm text-gray-600">{{ get_text('current_price') }}</p>
+                        <p class="text-xl font-semibold">${{ "%.2f"|format(recommendation.current_price) }}</p>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-4 text-center">
+                        <p class="text-sm text-gray-600">{{ get_text('target_margin') }}</p>
+                        <p class="text-xl font-semibold">{{ "%.1f"|format(recommendation.target_margin) }}%</p>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-4 text-center">
+                        <p class="text-sm text-gray-600">{{ get_text('expected_margin') if 'expected_margin' in recommendation else get_text('profit_margin') }}</p>
+                        <p class="text-xl font-semibold text-green-600">{{ "%.1f"|format(recommendation.expected_margin) }}%</p>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-4 text-center">
+                        <p class="text-sm text-gray-600">{{ get_text('profit_margin') }}</p>
+                        <p class="text-xl font-semibold">${{ "%.2f"|format(recommendation.profit_per_unit) }}</p>
+                    </div>
+                </div>
+                
+                <div class="flex gap-3">
+                    <button onclick="applyPrice('{{ recommendation.sku }}', {{ recommendation.recommended_price }})" class="action-btn primary">
+                        {{ get_text('apply_price') }}
+                    </button>
+                    <button onclick="setPriceAlert('{{ recommendation.sku }}')" class="action-btn secondary">
+                        {{ get_text('set_alert') }}
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div>
+            <div class="price-card mb-6">
+                <h2 class="text-lg font-semibold mb-4">{{ get_text('margin_analysis') }}</h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <p class="text-sm text-gray-600 mb-1">{{ get_text('current_price') }}</p>
+                        <div class="flex justify-between items-center">
+                            <span class="text-xl font-semibold">${{ "%.2f"|format(recommendation.current_price) if recommendation else '0.00' }}</span>
+                        </div>
+                    </div>
+                    
+                    {% if recommendation %}
+                    <div class="border-t pt-4">
+                        <p class="text-sm text-gray-600 mb-2">{{ get_text('margin_analysis') }}</p>
+                        <div class="space-y-2">
+                            <div class="flex justify-between">
+                                <span class="text-sm text-gray-500">Target</span>
+                                <span>{{ "%.1f"|format(recommendation.target_margin) }}%</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-sm text-gray-500">{{ get_text('expected_margin') if 'expected_margin' in recommendation else 'Expected' }}</span>
+                                <span class="text-green-600">{{ "%.1f"|format(recommendation.expected_margin) }}%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-green-500 h-2 rounded-full" style="width: {{ (recommendation.expected_margin / recommendation.target_margin * 100)|round|int if recommendation.target_margin > 0 else 0 }}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="border-t pt-4">
+                        <p class="text-sm text-gray-600 mb-2">Confidence</p>
+                        <div class="flex items-center gap-2">
+                            <div class="flex-1 bg-gray-200 rounded-full h-2">
+                                <div class="bg-purple-500 h-2 rounded-full" style="width: {{ (recommendation.confidence * 100)|round|int }}%"></div>
+                            </div>
+                            <span class="text-sm font-medium">{{ (recommendation.confidence * 100)|round|int }}%</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            {% if threats and threats|length > 0 %}
+            <div class="price-card">
+                <h2 class="text-lg font-semibold mb-4">{{ get_text('competitive_threats') }}</h2>
+                
+                {% for threat in threats[:3] %}
+                <div class="threat-card {{ threat.threat_level }}">
+                    <div class="flex justify-between items-start mb-2">
+                        <p class="font-medium text-sm">{{ threat.title[:40] }}...</p>
+                        <span class="metric-badge {% if threat.threat_level == 'critical' %}red{% elif threat.threat_level == 'high' %}yellow{% else %}blue{% endif %}">
+                            {{ get_text('threat_' + threat.threat_level) }}
+                        </span>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-1">ASIN: {{ threat.asin }}</p>
+                    <p class="text-sm text-gray-600">Price diff: <span class="font-semibold text-red-600">{{ "%.1f"|format(threat.price_difference_percent) }}%</span></p>
+                    <p class="text-xs text-gray-500 mt-2">{{ threat.recommended_response[:80] }}...</p>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    {% if competitor_analysis and competitor_analysis.competitors %}
+    <div class="price-card">
+        <h2 class="text-lg font-semibold mb-4">{{ get_text('competitor_analysis') }} ({{ competitor_analysis.competitors_found }} {{ get_text('competitors_found') }})</h2>
+        
+        {% if competitor_analysis.price_statistics %}
+        <div class="grid grid-cols-3 gap-4 mb-6">
+            <div class="bg-green-50 rounded-lg p-4 text-center">
+                <p class="text-sm text-gray-600">{{ get_text('min_price') }}</p>
+                <p class="text-2xl font-bold text-green-600">${{ "%.2f"|format(competitor_analysis.price_statistics.minimum) }}</p>
+            </div>
+            <div class="bg-blue-50 rounded-lg p-4 text-center">
+                <p class="text-sm text-gray-600">{{ get_text('avg_price') }}</p>
+                <p class="text-2xl font-bold text-blue-600">${{ "%.2f"|format(competitor_analysis.price_statistics.average) }}</p>
+            </div>
+            <div class="bg-red-50 rounded-lg p-4 text-center">
+                <p class="text-sm text-gray-600">{{ get_text('max_price') }}</p>
+                <p class="text-2xl font-bold text-red-600">${{ "%.2f"|format(competitor_analysis.price_statistics.maximum) }}</p>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if competitor_analysis.market_position %}
+        <div class="mb-6">
+            <p class="text-sm text-gray-600 mb-2">{{ get_text('market_position') }}</p>
+            <span class="metric-badge {% if competitor_analysis.market_position.position == 'budget' %}green{% elif competitor_analysis.market_position.position == 'premium' %}red{% else %}blue{% endif %}">
+                {{ competitor_analysis.market_position.position|upper }} - {{ competitor_analysis.market_position.description }}
+            </span>
+        </div>
+        {% endif %}
+        
+        <div class="hidden md:block">
+            <div class="competitor-row font-medium text-gray-600 bg-gray-50 rounded-t-lg">
+                <div>{{ get_text('competitor_col_product') }}</div>
+                <div>{{ get_text('competitor_col_price') }}</div>
+                <div>{{ get_text('competitor_col_rating') }}</div>
+                <div>{{ get_text('competitor_col_seller') }}</div>
+            </div>
+            
+            {% for comp in competitor_analysis.competitors %}
+            <div class="competitor-row hover:bg-gray-50">
+                <div class="text-sm">
+                    <p class="font-medium">{{ comp.title[:50] }}...</p>
+                    <p class="text-xs text-gray-500">{{ comp.asin }}</p>
+                </div>
+                <div class="text-lg font-semibold">${{ "%.2f"|format(comp.price) }}</div>
+                <div>
+                    {% if comp.rating %}
+                    <span class="metric-badge {% if comp.rating >= 4.5 %}green{% elif comp.rating >= 4.0 %}yellow{% else %}red{% endif %}">
+                        {{ "%.1f"|format(comp.rating) }} ({{ comp.review_count }})
+                    </span>
+                    {% else %}
+                    <span class="text-gray-400">N/A</span>
+                    {% endif %}
+                </div>
+                <div class="text-sm text-gray-600">{{ comp.seller }}</div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div class="md:hidden">
+            {% for comp in competitor_analysis.competitors %}
+            <div class="bg-gray-50 rounded-lg p-4 mb-3">
+                <div class="flex justify-between items-start mb-2">
+                    <p class="font-medium text-sm">{{ comp.title[:40] }}...</p>
+                    <p class="text-lg font-semibold">${{ "%.2f"|format(comp.price) }}</p>
+                </div>
+                <div class="flex justify-between text-sm text-gray-500">
+                    <span>{{ comp.asin }}</span>
+                    {% if comp.rating %}
+                    <span>{{ "%.1f"|format(comp.rating) }} stars</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function applyPrice(sku, price) {
+    if (confirm(`Apply price $${price.toFixed(2)} to ${sku}?`)) {
+        fetch(`/api/tools/update_amazon_price`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({sku: sku, new_price: price})
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success || (data.result && JSON.parse(data.result).success)) {
+                alert('Price updated successfully!');
+            } else {
+                alert('Failed to update price');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Price update request sent');
+        });
+    }
+}
+
+function setPriceAlert(sku) {
+    const threshold = prompt('Enter price alert threshold (e.g., 5 for 5% change):', '5');
+    if (threshold) {
+        fetch(`/api/notifications`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                type: 'price_alert',
+                sku: sku,
+                threshold: parseFloat(threshold)
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            alert('Price alert set successfully!');
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Alert set (saved locally)');
+        });
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/sparkline.css">
+<style>
+    @media (max-width: 639px) {
+        canvas[id^="sparkline"] {
+            width: 60px !important;
+            height: 24px !important;
+        }
+    }
+    @media (min-width: 640px) {
+        canvas[id^="sparkline"] {
+            width: 80px !important;
+            height: 30px !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
+        <div>
+            <h2 class="text-2xl sm:text-3xl font-bold text-gray-900">{{ get_text('dashboard_page_title') }}</h2>
+            <p class="text-gray-600 mt-1 text-sm sm:text-base">
+                {{ get_text('dashboard_last_updated') }}: 
+                <span id="last-updated-time" data-relative-time data-timestamp="{{ last_updated }}">{{ relative_time }}</span>
+            </p>
+        </div>
+        <a href="/dashboard?lang={{ lang }}" class="inline-flex items-center px-4 py-2 sm:py-2.5 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors text-sm sm:text-base w-full sm:w-auto justify-center">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            {{ get_text('dashboard_refresh') }}
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 card-hover">
+            <div class="flex items-center justify-between mb-3 sm:mb-4">
+                <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-red-500 to-orange-500 rounded-lg flex items-center justify-center">
+                    <span class="text-white text-lg sm:text-xl">📦</span>
+                </div>
+                <div class="flex items-center gap-1 sm:gap-2">
+                    {% if low_stock_critical > 0 %}
+                    <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs font-semibold bg-red-100 text-red-700 rounded-full">{{ get_text('dashboard_critical') }}</span>
+                    {% endif %}
+                    <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs font-semibold rounded-full
+                        {% if low_stock_status == 'critical' %}bg-red-100 text-red-700
+                        {% elif low_stock_status == 'attention' %}bg-yellow-100 text-yellow-700
+                        {% else %}bg-green-100 text-green-700{% endif %}">
+                        {{ get_text('status_' + low_stock_status) }}
+                    </span>
+                </div>
+            </div>
+            <p class="text-xs sm:text-sm text-gray-600 mb-1">{{ get_text('dashboard_low_stock') }}</p>
+            <div class="flex items-end justify-between">
+                <div>
+                    <p class="text-2xl sm:text-3xl font-bold text-gray-900">{{ low_stock_count }}</p>
+                    <div class="flex items-center mt-1 text-xs sm:text-sm">
+                        <span class="mr-1 {% if low_stock_trend.is_positive %}text-green-600{% else %}text-red-600{% endif %}">
+                            {{ low_stock_trend.arrow }}
+                        </span>
+                        <span class="{% if low_stock_trend.is_positive %}text-green-600{% else %}text-red-600{% endif %}">
+                            {{ low_stock_trend.percentage }}%
+                        </span>
+                        <span class="text-gray-500 ml-1 hidden sm:inline">{{ get_text('trend_vs_last_week') }}</span>
+                    </div>
+                </div>
+                <canvas id="sparkline-low-stock" width="60" height="24"></canvas>
+            </div>
+            <a href="/inventory?lang={{ lang }}" class="mt-3 sm:mt-4 inline-flex items-center text-xs sm:text-sm text-purple-600 hover:text-purple-800 py-2">
+                {{ get_text('dashboard_go_to_inventory') }}
+                <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+            </a>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 card-hover">
+            <div class="flex items-center justify-between mb-3 sm:mb-4">
+                <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-lg flex items-center justify-center">
+                    <span class="text-white text-lg sm:text-xl">📋</span>
+                </div>
+                <div class="flex items-center gap-1 sm:gap-2">
+                    {% if pending_orders_count > 5 %}
+                    <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs font-semibold bg-yellow-100 text-yellow-700 rounded-full">{{ get_text('dashboard_warning') }}</span>
+                    {% endif %}
+                    <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs font-semibold rounded-full
+                        {% if orders_status == 'attention' %}bg-yellow-100 text-yellow-700
+                        {% else %}bg-green-100 text-green-700{% endif %}">
+                        {{ get_text('status_' + orders_status) }}
+                    </span>
+                </div>
+            </div>
+            <p class="text-xs sm:text-sm text-gray-600 mb-1">{{ get_text('dashboard_pending_orders') }}</p>
+            <div class="flex items-end justify-between">
+                <div>
+                    <p class="text-2xl sm:text-3xl font-bold text-gray-900">{{ pending_orders_count }}</p>
+                    <div class="flex items-center mt-1 text-xs sm:text-sm">
+                        <span class="mr-1 {% if orders_trend.is_positive %}text-green-600{% else %}text-red-600{% endif %}">
+                            {{ orders_trend.arrow }}
+                        </span>
+                        <span class="{% if orders_trend.is_positive %}text-green-600{% else %}text-red-600{% endif %}">
+                            {{ orders_trend.percentage }}%
+                        </span>
+                        <span class="text-gray-500 ml-1 hidden sm:inline">{{ get_text('trend_vs_last_week') }}</span>
+                    </div>
+                </div>
+                <canvas id="sparkline-orders" width="60" height="24"></canvas>
+            </div>
+            <a href="/inventory?lang={{ lang }}" class="mt-3 sm:mt-4 inline-flex items-center text-xs sm:text-sm text-purple-600 hover:text-purple-800 py-2">
+                {{ get_text('dashboard_go_to_orders') }}
+                <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+            </a>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 card-hover">
+            <div class="flex items-center justify-between mb-3 sm:mb-4">
+                <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
+                    <span class="text-white text-lg sm:text-xl">⭐</span>
+                </div>
+                <div class="flex items-center gap-1 sm:gap-2">
+                    {% if negative_reviews_critical > 0 %}
+                    <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs font-semibold bg-red-100 text-red-700 rounded-full">{{ get_text('dashboard_critical') }}</span>
+                    {% endif %}
+                    <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs font-semibold rounded-full
+                        {% if reviews_status == 'critical' %}bg-red-100 text-red-700
+                        {% elif reviews_status == 'attention' %}bg-yellow-100 text-yellow-700
+                        {% else %}bg-green-100 text-green-700{% endif %}">
+                        {{ get_text('status_' + reviews_status) }}
+                    </span>
+                </div>
+            </div>
+            <p class="text-xs sm:text-sm text-gray-600 mb-1">{{ get_text('dashboard_negative_reviews') }}</p>
+            <div class="flex items-end justify-between">
+                <div>
+                    <p class="text-2xl sm:text-3xl font-bold text-gray-900">{{ negative_reviews_count }}</p>
+                    <div class="flex items-center mt-1 text-xs sm:text-sm">
+                        <span class="mr-1 {% if reviews_trend.is_positive %}text-green-600{% else %}text-red-600{% endif %}">
+                            {{ reviews_trend.arrow }}
+                        </span>
+                        <span class="{% if reviews_trend.is_positive %}text-green-600{% else %}text-red-600{% endif %}">
+                            {{ reviews_trend.percentage }}%
+                        </span>
+                        <span class="text-gray-500 ml-1 hidden sm:inline">{{ get_text('trend_vs_last_week') }}</span>
+                    </div>
+                </div>
+                <canvas id="sparkline-reviews" width="60" height="24"></canvas>
+            </div>
+            <a href="/reviews?lang={{ lang }}" class="mt-3 sm:mt-4 inline-flex items-center text-xs sm:text-sm text-purple-600 hover:text-purple-800 py-2">
+                {{ get_text('dashboard_go_to_reviews') }}
+                <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+            </a>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 card-hover">
+            <div class="flex items-center justify-between mb-3 sm:mb-4">
+                <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg flex items-center justify-center">
+                    <span class="text-white text-lg sm:text-xl">💰</span>
+                </div>
+                <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs font-semibold bg-green-100 text-green-700 rounded-full">
+                    {{ get_text('status_good') }}
+                </span>
+            </div>
+            <p class="text-xs sm:text-sm text-gray-600 mb-1">{{ get_text('dashboard_todays_revenue') }}</p>
+            <div class="flex items-end justify-between">
+                <div>
+                    <p class="text-2xl sm:text-3xl font-bold text-gray-900">${{ todays_revenue }}</p>
+                    <div class="flex items-center mt-1 text-xs sm:text-sm">
+                        <span class="mr-1 {% if revenue_trend.is_positive %}text-green-600{% else %}text-red-600{% endif %}">
+                            {{ revenue_trend.arrow }}
+                        </span>
+                        <span class="{% if revenue_trend.is_positive %}text-green-600{% else %}text-red-600{% endif %}">
+                            {{ revenue_trend.percentage }}%
+                        </span>
+                        <span class="text-gray-500 ml-1 hidden sm:inline">{{ get_text('trend_vs_last_week') }}</span>
+                    </div>
+                </div>
+                <canvas id="sparkline-revenue" width="60" height="24"></canvas>
+            </div>
+            <a href="/profit?lang={{ lang }}" class="mt-3 sm:mt-4 inline-flex items-center text-xs sm:text-sm text-purple-600 hover:text-purple-800 py-2">
+                {{ get_text('profit_calc') }}
+                <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+            </a>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6">
+        <h3 class="text-lg sm:text-xl font-bold text-gray-900 mb-4 sm:mb-6">{{ get_text('dashboard_quick_actions') }}</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <a href="/profit?lang={{ lang }}" class="flex items-center p-3 sm:p-4 rounded-lg border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-colors">
+                <div class="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg flex items-center justify-center mr-3 sm:mr-4">
+                    <span class="text-white">💰</span>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-gray-900 text-sm sm:text-base">{{ get_text('profit_calc') }}</h4>
+                    <p class="text-xs sm:text-sm text-gray-600 hidden sm:block">计算真实利润</p>
+                </div>
+            </a>
+
+            <a href="/inventory?lang={{ lang }}" class="flex items-center p-3 sm:p-4 rounded-lg border border-gray-200 hover:border-green-300 hover:bg-green-50 transition-colors">
+                <div class="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg flex items-center justify-center mr-3 sm:mr-4">
+                    <span class="text-white">📦</span>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-gray-900 text-sm sm:text-base">{{ get_text('low_stock') }}</h4>
+                    <p class="text-xs sm:text-sm text-gray-600 hidden sm:block">库存预警</p>
+                </div>
+            </a>
+
+            <a href="/competitor?lang={{ lang }}" class="flex items-center p-3 sm:p-4 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                <div class="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-lg flex items-center justify-center mr-3 sm:mr-4">
+                    <span class="text-white">🔍</span>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-gray-900 text-sm sm:text-base">{{ get_text('comp_price') }}</h4>
+                    <p class="text-xs sm:text-sm text-gray-600 hidden sm:block">竞品分析</p>
+                </div>
+            </a>
+
+            <a href="/reviews?lang={{ lang }}" class="flex items-center p-3 sm:p-4 rounded-lg border border-gray-200 hover:border-orange-300 hover:bg-orange-50 transition-colors">
+                <div class="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center mr-3 sm:mr-4">
+                    <span class="text-white">⭐</span>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-gray-900 text-sm sm:text-base">{{ get_text('review_alert') }}</h4>
+                    <p class="text-xs sm:text-sm text-gray-600 hidden sm:block">评论监控</p>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 mt-4 sm:mt-6">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-2">
+            <h3 class="text-lg sm:text-xl font-bold text-gray-900">{{ get_text('dashboard_sync_status') }}</h3>
+            <a href="/api/tasks" target="_blank" class="text-sm text-purple-600 hover:text-purple-800">查看所有任务</a>
+        </div>
+
+        {% if active_tasks %}
+        <div class="mb-4 sm:mb-6">
+            <h4 class="text-sm font-semibold text-gray-700 mb-2 sm:mb-3">{{ get_text('dashboard_active_tasks') }} ({{ active_tasks|length }})</h4>
+            <div class="space-y-2 sm:space-y-3">
+                {% for task in active_tasks %}
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-blue-50 rounded-lg gap-2">
+                    <div class="flex items-center w-full sm:w-auto">
+                        <div class="animate-spin w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full mr-3"></div>
+                        <div>
+                            <p class="font-medium text-gray-900 text-sm sm:text-base">{{ task.tool_name }}</p>
+                            <p class="text-xs sm:text-sm text-gray-500">{{ task.message }}</p>
+                        </div>
+                    </div>
+                    <div class="text-left sm:text-right w-full sm:w-auto">
+                        <span class="px-2 py-1 text-xs font-semibold rounded-full
+                            {% if task.status == 'pending' %}bg-gray-100 text-gray-600
+                            {% elif task.status == 'running' %}bg-blue-100 text-blue-700
+                            {% endif %}">
+                            {{ get_text('task_' + task.status) }}
+                        </span>
+                        <p class="text-xs sm:text-sm text-gray-500 mt-1">{{ task.progress }}%</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <div>
+            <h4 class="text-sm font-semibold text-gray-700 mb-2 sm:mb-3">{{ get_text('dashboard_recent_tasks') }}</h4>
+            {% if recent_tasks %}
+            <div class="space-y-2">
+                {% for task in recent_tasks %}
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 gap-2">
+                    <div class="flex items-center w-full sm:w-auto">
+                        <span class="mr-2 sm:mr-3
+                            {% if task.status == 'completed' %}text-green-500
+                            {% elif task.status == 'failed' %}text-red-500
+                            {% elif task.status == 'running' %}text-blue-500
+                            {% else %}text-gray-400{% endif %} text-lg">
+                            {% if task.status == 'completed' %}✓
+                            {% elif task.status == 'failed' %}✗
+                            {% elif task.status == 'running' %}⟳
+                            {% else %}○{% endif %}
+                        </span>
+                        <div>
+                            <p class="font-medium text-gray-900 text-sm sm:text-base">{{ task.tool_name }}</p>
+                            <p class="text-xs text-gray-500 hidden sm:block">{{ task.task_id }}</p>
+                        </div>
+                    </div>
+                    <span class="px-2 py-1 text-xs font-semibold rounded-full w-full sm:w-auto text-center
+                        {% if task.status == 'completed' %}bg-green-100 text-green-700
+                        {% elif task.status == 'failed' %}bg-red-100 text-red-700
+                        {% elif task.status == 'running' %}bg-blue-100 text-blue-700
+                        {% else %}bg-gray-100 text-gray-600{% endif %}">
+                        {{ get_text('task_' + task.status) }}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-gray-500 text-center py-4">{{ get_text('task_no_active') }}</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+window.lowStockHistory = {{ low_stock_history | tojson }};
+window.revenueHistory = {{ revenue_history | tojson }};
+window.reviewsHistory = {{ reviews_history | tojson }};
+window.ordersHistory = {{ orders_history | tojson }};
+</script>
+{% endblock %}

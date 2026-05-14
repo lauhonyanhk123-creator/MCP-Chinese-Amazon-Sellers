@@ -872,14 +872,14 @@ def _calculate_recommended_price(
     }
 
 
-def _get_price_action(current: float, recommended: float, threshold: float = 0.05) -&gt; str:
+def _get_price_action(current: float, recommended: float, threshold: float = 0.05) -> str:
     """Determine price action recommendation based on difference."""
     diff = recommended - current
-    diff_percent = (diff / current * 100) if current &gt; 0 else 0
+    diff_percent = (diff / current * 100) if current > 0 else 0
 
-    if abs(diff_percent) &lt; threshold * 100:
+    if abs(diff_percent) < threshold * 100:
         return "KEEP_CURRENT"
-    elif diff &gt; 0:
+    elif diff > 0:
         return "INCREASE_PRICE"
     else:
         return "DECREASE_PRICE"
@@ -895,7 +895,7 @@ def _get_price_action(current: float, recommended: float, threshold: float = 0.0
         "openWorldHint": False,
     },
 )
-async def save_product_profile_tool(params: SaveProductProfileInput) -&gt; str:
+async def save_product_profile_tool(params: SaveProductProfileInput) -> str:
     """
     Save or update product cost data to keep it up-to-date.
     保存或更新产品成本数据以保持最新。
@@ -959,7 +959,7 @@ async def save_product_profile_tool(params: SaveProductProfileInput) -&gt; str:
     },
 )
 @require_feature("get_product_profile")
-async def get_product_profile_tool(params: GetProductProfileInput) -&gt; str:
+async def get_product_profile_tool(params: GetProductProfileInput) -> str:
     """
     Get saved product data. Returns warning if data is stale.
     获取已保存的产品数据。如果数据过期会显示警告。
@@ -1049,7 +1049,7 @@ async def get_product_profile_tool(params: GetProductProfileInput) -&gt; str:
     },
 )
 @require_feature("list_all_products")
-async def list_all_products(params: GetStaleProductsInput) -&gt; str:
+async def list_all_products(params: GetStaleProductsInput) -> str:
     """List all saved product profiles. Shows freshness status."""
     try:
         all_profiles = get_all_product_profiles()
@@ -1093,7 +1093,7 @@ async def list_all_products(params: GetStaleProductsInput) -&gt; str:
             if stale_products:
                 lines.extend([
                     "---",
-                    f"## ⚠️ Stale Products (last updated &gt; {params.hours}h ago)",
+                    f"## ⚠️ Stale Products (last updated > {params.hours}h ago)",
                     "",
                 ])
                 for p in stale_products:
@@ -1116,7 +1116,7 @@ async def list_all_products(params: GetStaleProductsInput) -&gt; str:
     },
 )
 @require_feature("get_stale_products")
-async def get_stale_products_tool(params: GetStaleProductsInput) -&gt; str:
+async def get_stale_products_tool(params: GetStaleProductsInput) -> str:
     """Find products with data that needs updating."""
     try:
         stale = get_stale_product_profiles(params.hours)

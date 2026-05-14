@@ -158,7 +158,7 @@ class LicenseManager:
         }
         return names.get(tier, "未知等级")
 
-    def get_upgrade_message(self, missing_feature: str) -&gt; str:
+    def get_upgrade_message(self, missing_feature: str) -> str:
         """获取升级提示信息（中文）"""
         messages = {
             "get_product_cost_1688": "升级到专业版可使用1688产品成本查询功能",
