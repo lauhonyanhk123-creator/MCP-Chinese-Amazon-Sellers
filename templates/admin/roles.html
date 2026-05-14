@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}{{ get_text('role_management') }}{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-3xl font-bold text-gray-900">{{ get_text('role_management') }}</h1>
+    <p class="text-gray-600 mt-2">{{ get_text('admin') }} / {{ get_text('role_management') }}</p>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="mb-4 p-4 rounded-lg {% if category == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="text-lg font-semibold text-gray-900">{{ get_text('permission_matrix') }}</h2>
+        <p class="text-sm text-gray-500 mt-1">Configure permissions for each role</p>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Permission</th>
+                    {% for role_data in roles_data %}
+                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        {{ get_text(role_data.name) }}
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {% for permission in all_permissions %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {{ permission }}
+                    </td>
+                    {% for role_data in roles_data %}
+                    <td class="px-6 py-4 whitespace-nowrap text-center">
+                        {% if permission in role_data.permissions %}
+                        <svg class="w-5 h-5 text-green-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        {% else %}
+                        <svg class="w-5 h-5 text-gray-300 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
+                        </svg>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="mt-6 space-y-6">
+    {% for role_data in roles_data %}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-semibold text-gray-900">{{ get_text(role_data.name) }}</h3>
+                <p class="text-sm text-gray-500 mt-1">{{ role_data.permissions|length }} permissions assigned</p>
+            </div>
+            <button onclick="editRolePermissions('{{ role_data.name }}')" class="px-4 py-2 text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
+                {{ get_text('edit') }}
+            </button>
+        </div>
+        <div class="p-6">
+            <div class="flex flex-wrap gap-2">
+                {% for permission in role_data.permissions %}
+                <span class="px-3 py-1 bg-purple-100 text-purple-700 text-sm rounded-full">
+                    {{ permission }}
+                </span>
+                {% else %}
+                <span class="text-gray-400 text-sm">No permissions assigned</span>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div id="editRoleModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center">
+    <div class="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+        <div class="px-6 py-4 border-b border-gray-100 flex-shrink-0">
+            <h3 class="text-lg font-semibold text-gray-900">{{ get_text('role_permissions') }}: <span id="editRoleName"></span></h3>
+        </div>
+        <form id="editRoleForm" action="" method="POST" class="p-6 overflow-y-auto flex-1">
+            <input type="hidden" name="lang" value="{{ lang }}">
+            <div class="space-y-3">
+                {% for permission in all_permissions %}
+                <label class="flex items-center p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" name="permissions" value="{{ permission }}" id="perm_{{ permission }}" class="w-5 h-5 text-purple-600 rounded focus:ring-purple-500">
+                    <span class="ml-3 text-gray-700">{{ permission }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <div class="flex justify-end gap-3 pt-6 mt-4 border-t border-gray-100 flex-shrink-0">
+                <button type="button" onclick="closeEditRoleModal()" class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                    {{ get_text('cancel') }}
+                </button>
+                <button type="submit" class="px-4 py-2 gradient-bg text-white rounded-lg hover:opacity-90 transition-opacity">
+                    {{ get_text('save_changes') }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const rolesData = {{ roles_data|tojson }};
+const allPermissions = {{ all_permissions|tojson }};
+
+function editRolePermissions(roleName) {
+    document.getElementById('editRoleName').textContent = roleName;
+    document.getElementById('editRoleForm').action = '/admin/roles/' + roleName + '/update';
+    
+    allPermissions.forEach(perm => {
+        const checkbox = document.getElementById('perm_' + perm);
+        if (checkbox) {
+            checkbox.checked = false;
+        }
+    });
+    
+    const role = rolesData.find(r => r.name === roleName);
+    if (role) {
+        role.permissions.forEach(perm => {
+            const checkbox = document.getElementById('perm_' + perm);
+            if (checkbox) {
+                checkbox.checked = true;
+            }
+        });
+    }
+    
+    document.getElementById('editRoleModal').classList.remove('hidden');
+    document.getElementById('editRoleModal').classList.add('flex');
+}
+
+function closeEditRoleModal() {
+    document.getElementById('editRoleModal').classList.add('hidden');
+    document.getElementById('editRoleModal').classList.remove('flex');
+}
+</script>
+{% endblock %}

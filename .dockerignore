@@ -1,0 +1,114 @@
+# =============================================================================
+# Docker Ignore File - Exclude unnecessary files from Docker context
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+LICENSE
+CONTRIBUTING.md
+CHANGELOG.md
+
+# Testing
+tests/
+test_server.py
+test_api.py
+test_routes.py
+pytest.ini
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# Development files
+.env
+.env.local
+.env.*.local
+.env.example
+.env.cn.example
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# CI/CD
+.github/
+.travis.yml
+.gitlab-ci.yml
+Jenkinsfile
+
+# Logs
+*.log
+logs/
+audit.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+
+# Local data
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# Docker files (don't include these in the context)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Development scripts
+start_dev.sh
+launcher_cn.py
+
+# Load testing
+locustfile.py
+load_testing_docs.py
+tests/load/
+
+# Playwright
+playwright-report/
+test-results/
+playwright.config.js
+
+# Ruff and linting
+ruff.toml
+.ruff_cache/
+.mypy_cache/
+
+# Bandit
+.bandit
+
+# Codecov
+codecov.yml

@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Back Button -->
+    <a href="/?lang={{ lang }}" class="inline-flex items-center text-gray-600 hover:text-gray-900 mb-6">
+        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+        </svg>
+        {{ get_text('nav_home') }}
+    </a>
+
+    <!-- Page Title -->
+    <h2 class="text-3xl font-bold text-gray-900 mb-8">{{ get_text('low_stock_page_title') }}</h2>
+
+    <!-- Filters Section -->
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-8">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Filters</h3>
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">{{ get_text('low_stock_threshold_label') }}</label>
+                <input type="number" name="threshold" value="{{ threshold or 10 }}" 
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">{{ get_text('risk_threshold') }}</label>
+                <input type="number" name="risk_threshold" value="{{ risk_threshold or 14 }}" min="1" max="90"
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">{{ get_text('low_stock_platform_filter_label') }}</label>
+                <select name="platform" 
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                    <option value="all" {% if platform == 'all' %}selected{% endif %}>{{ get_text('low_stock_platform_all') }}</option>
+                    <option value="1688" {% if platform == '1688' %}selected{% endif %}>{{ get_text('low_stock_platform_1688') }}</option>
+                    <option value="amazon" {% if platform == 'amazon' %}selected{% endif %}>{{ get_text('low_stock_platform_amazon') }}</option>
+                </select>
+            </div>
+            <div class="md:col-span-1 flex items-center">
+                <input type="hidden" name="lang" value="{{ lang }}">
+                <button type="submit" 
+                        class="gradient-bg text-white px-6 py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity">
+                    {{ get_text('low_stock_apply_button') }}
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Prediction Summary Cards -->
+    {% if predictions or health_score %}
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <!-- Products at Risk -->
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">{{ get_text('products_at_risk') }}</p>
+                    <p class="text-2xl font-bold text-gray-900">{{ predictions|length }}</p>
+                </div>
+                <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                    <span class="text-xl">⚠️</span>
+                </div>
+            </div>
+            {% if predictions %}
+            <div class="mt-4 flex gap-2">
+                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                    🔴 {{ predictions|selectattr('risk_level', 'equalto', 'critical')|list|length }}
+                </span>
+                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
+                    🟡 {{ predictions|selectattr('risk_level', 'equalto', 'high')|list|length + predictions|selectattr('risk_level', 'equalto', 'medium')|list|length }}
+                </span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Average Days of Supply -->
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">{{ get_text('avg_days_supply') }}</p>
+                    <p class="text-2xl font-bold text-gray-900">{{ avg_days_supply if avg_days_supply != 'inf' else 'N/A' }}</p>
+                </div>
+                <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span class="text-xl">📅</span>
+                </div>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">{{ get_text('days') }}</p>
+        </div>
+
+        <!-- Inventory Health Score -->
+        {% if health_score %}
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">{{ get_text('inventory_health') }}</p>
+                    <p class="text-2xl font-bold text-gray-900">{{ health_score.score }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-full flex items-center justify-center {% if health_score.status == 'good' %}bg-green-100{% elif health_score.status == 'moderate' %}bg-yellow-100{% else %}bg-red-100{% endif %}">
+                    {% if health_score.status == 'good' %}
+                    <span class="text-xl">✅</span>
+                    {% elif health_score.status == 'moderate' %}
+                    <span class="text-xl">⚠️</span>
+                    {% else %}
+                    <span class="text-xl">❌</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="mt-2">
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="h-2 rounded-full {% if health_score.status == 'good' %}bg-green-500{% elif health_score.status == 'moderate' %}bg-yellow-500{% else %}bg-red-500{% endif %}" 
+                         style="width: {{ health_score.percentage }}%"></div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Recommended Reorder Items -->
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">{{ get_text('recommended_reorder') }}</p>
+                    <p class="text-2xl font-bold text-gray-900">
+                        {% set reorder_count = predictions|selectattr('reorder_urgency', 'in', ['critical', 'high'])|list|length %}
+                        {{ reorder_count }}
+                    </p>
+                </div>
+                <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                    <span class="text-xl">📦</span>
+                </div>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">{{ get_text('urgency_high') }} / {{ get_text('urgency_critical') }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Summary -->
+    {% if alerts %}
+    <div class="mb-6">
+        {% set summary = get_text('low_stock_summary') %}
+        <p class="text-lg text-gray-700 font-medium">{{ summary.replace('X', alerts|length|string) }}</p>
+    </div>
+
+    <!-- Alerts Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for alert in alerts %}
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-6 card-hover">
+            <!-- Severity -->
+            <div class="flex items-center mb-4">
+                <span class="text-2xl mr-2">
+                    {% if alert.severity == 'critical' %}
+                        🔴
+                    {% elif alert.severity == 'warning' %}
+                        🟡
+                    {% else %}
+                        🟢
+                    {% endif %}
+                </span>
+                <span class="text-sm font-semibold uppercase tracking-wide 
+                     {% if alert.severity == 'critical' %}text-red-600
+                     {% elif alert.severity == 'warning' %}text-yellow-600
+                     {% else %}text-green-600{% endif %}">
+                    {{ alert.severity }}
+                </span>
+            </div>
+            
+            <!-- Product Name -->
+            <h4 class="text-lg font-bold text-gray-900 mb-2">{{ alert.product_name }}</h4>
+            
+            <!-- SKU -->
+            <p class="text-sm text-gray-500 mb-4">{{ get_text('low_stock_col_sku') }}: {{ alert.sku }}</p>
+            
+            <!-- Platform Badge -->
+            <div class="mb-4">
+                <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                    {{ alert.platform }}
+                </span>
+            </div>
+            
+            <!-- Stock Info -->
+            <div class="space-y-2">
+                <div class="flex justify-between items-center">
+                    <span class="text-sm text-gray-600">{{ get_text('low_stock_col_current_stock') }} / {{ get_text('low_stock_threshold_label')|lower }}</span>
+                    <span class="text-sm font-bold text-gray-900">{{ alert.current_stock }} / {{ alert.threshold }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-sm text-gray-600">{{ get_text('low_stock_col_shortage') }}</span>
+                    <span class="text-sm font-bold text-red-600">-{{ alert.shortage }}</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Stockout Predictions Section -->
+    {% if predictions %}
+    <div class="mt-8">
+        <h3 class="text-2xl font-bold text-gray-900 mb-6 flex items-center">
+            <span class="mr-2">📊</span>
+            {{ get_text('stockout_prediction') }}
+        </h3>
+
+        <!-- Predictions Table -->
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                {{ get_text('low_stock_col_product_name') }}
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                {{ get_text('low_stock_col_sku') }}
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                {{ get_text('low_stock_col_current_stock') }}
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                {{ get_text('days_of_supply') }}
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                {{ get_text('days_until_stockout') }}
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                {{ get_text('risk_level') }}
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                {{ get_text('predicted_stockout') }}
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                {{ get_text('recommended_reorder') }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for pred in predictions %}
+                        <tr class="{% if pred.risk_level == 'critical' %}bg-red-50{% elif pred.risk_level == 'high' %}bg-orange-50{% elif pred.risk_level == 'medium' %}bg-yellow-50{% endif %}">
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">{{ pred.product_name }}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-gray-500">{{ pred.sku }}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-semibold {% if pred.current_stock <= 0 %}text-red-600{% elif pred.current_stock <= 5 %}text-orange-600{% else %}text-gray-900{% endif %}">
+                                    {{ pred.current_stock }}
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-gray-900">
+                                    {% if pred.days_of_supply != float('inf') %}
+                                        {{ pred.days_of_supply }} {{ get_text('days') }}
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                {% if pred.days_until_stockout != float('inf') %}
+                                <div class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold
+                                    {% if pred.risk_level == 'critical' %}bg-red-200 text-red-800
+                                    {% elif pred.risk_level == 'high' %}bg-orange-200 text-orange-800
+                                    {% elif pred.risk_level == 'medium' %}bg-yellow-200 text-yellow-800
+                                    {% else %}bg-green-200 text-green-800{% endif %}">
+                                    {{ pred.days_until_stockout }} {{ get_text('days') }}
+                                </div>
+                                {% else %}
+                                <span class="text-sm text-gray-500">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold
+                                    {% if pred.risk_level == 'critical' %}bg-red-100 text-red-700
+                                    {% elif pred.risk_level == 'high' %}bg-orange-100 text-orange-700
+                                    {% elif pred.risk_level == 'medium' %}bg-yellow-100 text-yellow-700
+                                    {% else %}bg-green-100 text-green-700{% endif %}">
+                                    {% if pred.risk_level == 'critical' %}🔴 {{ get_text('risk_critical') }}
+                                    {% elif pred.risk_level == 'high' %}🟠 {{ get_text('risk_high') }}
+                                    {% elif pred.risk_level == 'medium' %}🟡 {{ get_text('risk_medium') }}
+                                    {% else %}🟢 {{ get_text('risk_low') }}
+                                    {% endif %}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                {% if pred.predicted_stockout_date %}
+                                <div class="text-sm text-gray-900">{{ pred.predicted_stockout_date }}</div>
+                                {% else %}
+                                <span class="text-sm text-gray-500">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-bold text-gray-900">{{ pred.reorder_quantity }}</span>
+                                    {% if pred.reorder_urgency in ['critical', 'high'] %}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold
+                                        {% if pred.reorder_urgency == 'critical' %}bg-red-200 text-red-800
+                                        {% else %}bg-orange-200 text-orange-800{% endif %}">
+                                        {% if pred.reorder_urgency == 'critical' %}{{ get_text('urgency_critical') }}{% else %}{{ get_text('urgency_high') }}{% endif %}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not alerts and not predictions %}
+    <!-- No Alerts -->
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 p-12 text-center">
+        <div class="w-20 h-20 mx-auto mb-6 bg-green-100 rounded-full flex items-center justify-center">
+            <span class="text-green-600 text-4xl">✅</span>
+        </div>
+        <h4 class="text-xl font-semibold text-gray-900 mb-2">{{ get_text('low_stock_no_alerts') }}</h4>
+        {% if lang == 'cn' %}
+            <p class="text-gray-600">{{ get_text('welcome_desc') }}</p>
+        {% else %}
+            <p class="text-gray-600">All products are well-stocked!</p>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

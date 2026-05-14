@@ -1,0 +1,225 @@
+# =============================================================================
+# Cross-Border Seller MCP Server - Docker Compose Configuration
+# =============================================================================
+# Orchestrates all services: Flask app, Celery workers, Redis, PostgreSQL
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Web Application - Flask with Gunicorn
+  # ---------------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crossborder-web
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-5000}:5000"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=0
+      - SECRET_KEY=${SECRET_KEY:-changeme-production-secret-key}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///app/seller_data.db}
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - LICENSE_KEY=${LICENSE_KEY:-}
+      - TESTING=false
+      - TZ=UTC
+      - PYTHONUNBUFFERED=1
+      - SKIP_REDIS_WAIT=false
+      # 1688 API Configuration
+      - ALIBABA_APP_KEY=${ALIBABA_APP_KEY:-}
+      - ALIBABA_APP_SECRET=${ALIBABA_APP_SECRET:-}
+      - ALIBABA_API_KEY=${ALIBABA_API_KEY:-}
+      # Amazon SP-API Configuration
+      - AMAZON_CLIENT_ID=${AMAZON_CLIENT_ID:-}
+      - AMAZON_CLIENT_SECRET=${AMAZON_CLIENT_SECRET:-}
+      - AMAZON_REFRESH_TOKEN=${AMAZON_REFRESH_TOKEN:-}
+      - AMAZON_MARKETPLACE_ID=${AMAZON_MARKETPLACE_ID:-ATVPDKIKX0DER}
+      # Pricing Configuration
+      - USD_CNY_EXCHANGE_RATE=${USD_CNY_EXCHANGE_RATE:-7.2}
+      - AMAZON_REFERRAL_FEE_PERCENT=${AMAZON_REFERRAL_FEE_PERCENT:-15.0}
+      - DEFAULT_SHIPPING_COST_USD=${DEFAULT_SHIPPING_COST_USD:-2.0}
+      - DEFAULT_TARGET_MARGIN_PERCENT=${DEFAULT_TARGET_MARGIN_PERCENT:-25.0}
+      # Notification Settings
+      - NOTIFICATION_EMAIL_ENABLED=${NOTIFICATION_EMAIL_ENABLED:-false}
+      - NOTIFICATION_SLACK_ENABLED=${NOTIFICATION_SLACK_ENABLED:-false}
+      - NOTIFICATION_WECHAT_ENABLED=${NOTIFICATION_WECHAT_ENABLED:-false}
+      - NOTIFICATION_DINGTALK_ENABLED=${NOTIFICATION_DINGTALK_ENABLED:-false}
+      - NOTIFICATION_EMAIL_TO=${NOTIFICATION_EMAIL_TO:-}
+      - NOTIFICATION_SLACK_WEBHOOK_URL=${NOTIFICATION_SLACK_WEBHOOK_URL:-}
+      - NOTIFICATION_WECHAT_WEBHOOK_URL=${NOTIFICATION_WECHAT_WEBHOOK_URL:-}
+      - NOTIFICATION_DINGTALK_WEBHOOK_URL=${NOTIFICATION_DINGTALK_WEBHOOK_URL:-}
+      - NOTIFICATION_LOW_STOCK=${NOTIFICATION_LOW_STOCK:-true}
+      - NOTIFICATION_REVIEWS=${NOTIFICATION_REVIEWS:-true}
+      - NOTIFICATION_FREQUENCY=${NOTIFICATION_FREQUENCY:-immediate}
+    volumes:
+      - app_data:/app
+      - app_logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - crossborder-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # ---------------------------------------------------------------------------
+  # Celery Worker - Background Task Processor
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: crossborder-worker
+    restart: unless-stopped
+    command: celery -A celery_app worker --loglevel=info --concurrency=4
+    environment:
+      - FLASK_ENV=production
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///app/seller_data.db}
+      - LICENSE_KEY=${LICENSE_KEY:-}
+      - TZ=UTC
+      - PYTHONUNBUFFERED=1
+      # 1688 API Configuration
+      - ALIBABA_APP_KEY=${ALIBABA_APP_KEY:-}
+      - ALIBABA_APP_SECRET=${ALIBABA_APP_SECRET:-}
+      - ALIBABA_API_KEY=${ALIBABA_API_KEY:-}
+      # Amazon SP-API Configuration
+      - AMAZON_CLIENT_ID=${AMAZON_CLIENT_ID:-}
+      - AMAZON_CLIENT_SECRET=${AMAZON_CLIENT_SECRET:-}
+      - AMAZON_REFRESH_TOKEN=${AMAZON_REFRESH_TOKEN:-}
+    volumes:
+      - app_data:/app
+      - app_logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - crossborder-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # ---------------------------------------------------------------------------
+  # Celery Beat - Task Scheduler
+  # ---------------------------------------------------------------------------
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: crossborder-beat
+    restart: unless-stopped
+    command: celery -A celery_app beat --loglevel=info --scheduler redis
+    environment:
+      - FLASK_ENV=production
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - TZ=UTC
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - crossborder-network
+    profiles:
+      - scheduler
+
+  # ---------------------------------------------------------------------------
+  # Redis - Message Broker and Cache
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: crossborder-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - crossborder-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL - Production Database (Optional)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: crossborder-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_DB=crossborder
+      - POSTGRES_USER=${POSTGRES_USER:-crossborder}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - crossborder-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crossborder}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - production
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  crossborder-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  app_data:
+    driver: local
+  app_logs:
+    driver: local
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local

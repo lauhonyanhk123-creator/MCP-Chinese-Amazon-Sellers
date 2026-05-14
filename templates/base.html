@@ -2,11 +2,44 @@
 <html lang="{{ lang }}">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <meta name="theme-color" content="#667eea">
+    <meta name="description" content="跨境卖家AI助手 - 1688 + Amazon一站式管理工具">
+    <link rel="manifest" href="/static/manifest.json">
     <title>{% block title %}{{ get_text('title') }}{% endblock %}</title>
+    {% block extra_head %}{% endblock %}
+    <link rel="stylesheet" href="/static/css/mobile.css">
+    <script>
+        window.loadScript = function(src, callback) {
+            var script = document.createElement('script');
+            script.src = src;
+            script.onload = function() { if (callback) callback(true); };
+            script.onerror = function() { if (callback) callback(false); };
+            document.head.appendChild(script);
+        };
+    </script>
+    <script>
+        (function() {
+            var cdnList = [
+                'https://unpkg.com/chart.js@4.4.0/dist/chart.umd.min.js',
+                'https://cdn.bootcdn.net/ajax/libs/Chart.js/4.4.0/chart.umd.min.js',
+                '/static/js/chart.min.js'
+            ];
+            var idx = 0;
+            function tryNext() {
+                if (idx >= cdnList.length) return;
+                loadScript(cdnList[idx], function(ok) {
+                    if (ok) console.log('Chart.js loaded from:', cdnList[idx]);
+                    else { idx++; tryNext(); }
+                });
+            }
+            tryNext();
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.loli.net/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -24,11 +57,110 @@
             transform: translateY(-4px);
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
+
+        @media (hover: none), (pointer: coarse) {
+            .card-hover:hover {
+                transform: none;
+                box-shadow: inherit;
+            }
+        }
     </style>
+    <script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
-    <!-- Navigation -->
-    <nav class="bg-white shadow-sm border-b">
+    <!-- Mobile Header with Hamburger -->
+    <div class="md:hidden fixed top-0 left-0 right-0 bg-white shadow-sm border-b z-50 flex items-center justify-between px-4 h-14">
+        <div class="flex items-center">
+            <div class="w-8 h-8 gradient-bg rounded-lg flex items-center justify-center">
+                <span class="text-white font-bold text-sm">🚀</span>
+            </div>
+            <span class="ml-2 font-bold text-gray-900 text-sm">{{ get_text('title') }}</span>
+        </div>
+        <button id="menu-toggle" class="mobile-header-btn flex items-center justify-center w-11 h-11 rounded-lg hover:bg-gray-100 active:bg-gray-200" aria-label="{{ '菜单' if lang == 'cn' else 'Menu' }}">
+            <svg class="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Mobile Menu Overlay -->
+    <div id="menu-overlay" class="mobile-menu-overlay"></div>
+
+    <!-- Mobile Menu Drawer -->
+    <nav id="mobile-menu" class="mobile-menu">
+        <div class="flex justify-between items-center mb-6 pt-2">
+            <div class="flex items-center">
+                <div class="w-10 h-10 gradient-bg rounded-lg flex items-center justify-center">
+                    <span class="text-white font-bold text-xl">🚀</span>
+                </div>
+                <div class="ml-3">
+                    <h1 class="text-lg font-bold text-gray-900">{{ get_text('title') }}</h1>
+                    <p class="text-sm text-gray-500">{{ get_text('subtitle') }}</p>
+                </div>
+            </div>
+            <button id="menu-close" class="w-11 h-11 flex items-center justify-center rounded-lg hover:bg-gray-100 active:bg-gray-200" aria-label="{{ '关闭' if lang == 'cn' else 'Close' }}">
+                <svg class="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <a href="/dashboard?lang={{ lang }}" class="{% if request.path == '/dashboard' %}bg-purple-100 text-purple-700 font-medium{% endif %}">
+            📊 {{ get_text('dashboard_page_title') }}
+        </a>
+        <a href="/?lang={{ lang }}" class="{% if request.path == '/' %}bg-purple-100 text-purple-700 font-medium{% endif %}">
+            🏠 {{ get_text('nav_home') }}
+        </a>
+        <a href="/profit?lang={{ lang }}" class="{% if request.path == '/profit' %}bg-purple-100 text-purple-700 font-medium{% endif %}">
+            💰 {{ get_text('nav_profit') }}
+        </a>
+        <a href="/inventory?lang={{ lang }}" class="{% if request.path == '/inventory' %}bg-purple-100 text-purple-700 font-medium{% endif %}">
+            📦 {{ get_text('nav_inventory') }}
+        </a>
+        <a href="/reviews?lang={{ lang }}" class="{% if request.path == '/reviews' %}bg-purple-100 text-purple-700 font-medium{% endif %}">
+            ⭐ {{ get_text('nav_reviews') }}
+        </a>
+        <a href="/analytics?lang={{ lang }}" class="{% if request.path == '/analytics' %}bg-purple-100 text-purple-700 font-medium{% endif %}">
+            📈 {{ get_text('analytics_page_title') }}
+        </a>
+        <a href="/tasks?lang={{ lang }}" class="{% if request.path == '/tasks' %}bg-purple-100 text-purple-700 font-medium{% endif %}">
+            ✓ {{ get_text('task_queue') }}
+        </a>
+        <a href="/schedule?lang={{ lang }}" class="{% if request.path == '/schedule' %}bg-purple-100 text-purple-700 font-medium{% endif %}">
+            ⟳ {{ get_text('schedule_management') }}
+        </a>
+        <a href="/notifications?lang={{ lang }}" class="{% if request.path == '/notifications' %}bg-purple-100 text-purple-700 font-medium{% endif %}">
+            🔔 {{ get_text('nav_notifications') }}
+        </a>
+        <a href="/price-optimizer?lang={{ lang }}" class="{% if request.path == '/price-optimizer' %}bg-purple-100 text-purple-700 font-medium{% endif %}">
+            💹 {{ get_text('price_optimization') }}
+        </a>
+        {% if current_user and current_user.role == 'admin' %}
+        <a href="/admin?lang={{ lang }}" class="{% if request.path == '/admin' %}bg-purple-100 text-purple-700 font-medium{% endif %}">
+            ⚙️ {{ get_text('admin_dashboard') }}
+        </a>
+        {% endif %}
+        <div class="lang-switch mt-4">
+            <a href="?lang=cn" class="px-4 py-3 text-center rounded-lg {% if lang == 'cn' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600{% endif %}">中文</a>
+            <a href="?lang=en" class="px-4 py-3 text-center rounded-lg {% if lang == 'en' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600{% endif %}">English</a>
+        </div>
+        {% if current_user %}
+        <div class="mt-4 pt-4 border-t border-gray-200">
+            <p class="text-sm text-gray-500 mb-2">{{ current_user.username }} ({{ get_text(current_user.role) }})</p>
+            <a href="/logout?lang={{ lang }}" class="block px-4 py-2 text-center text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
+                {{ '登出' if lang == 'cn' else 'Logout' }}
+            </a>
+        </div>
+        {% else %}
+        <div class="mt-4 pt-4 border-t border-gray-200">
+            <a href="/login?lang={{ lang }}" class="block px-4 py-2 text-center text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100">
+                {{ '登录' if lang == 'cn' else 'Login' }}
+            </a>
+        </div>
+        {% endif %}
+    </nav>
+
+    <!-- Desktop Navigation -->
+    <nav class="desktop-nav bg-white shadow-sm border-b hidden md:block">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16">
                 <div class="flex items-center">
@@ -41,19 +173,67 @@
                             <p class="text-sm text-gray-500">{{ get_text('subtitle') }}</p>
                         </div>
                     </div>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <div class="flex space-x-2">
-                        <a href="?lang=cn" class="px-3 py-1 text-sm rounded {% if lang == 'cn' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600 hover:bg-gray-100{% endif %}">中文</a>
-                        <a href="?lang=en" class="px-3 py-1 text-sm rounded {% if lang == 'en' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600 hover:bg-gray-100{% endif %}">English</a>
+                    <div class="hidden md:flex ml-10 space-x-1">
+                        <a href="/dashboard?lang={{ lang }}" class="px-3 py-2 text-sm rounded {% if request.path == '/dashboard' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600 hover:bg-gray-100{% endif %}">{{ get_text('dashboard_page_title') }}</a>
+                        <a href="/?lang={{ lang }}" class="px-3 py-2 text-sm rounded {% if request.path == '/' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600 hover:bg-gray-100{% endif %}">{{ get_text('nav_home') }}</a>
+                        <a href="/profit?lang={{ lang }}" class="px-3 py-2 text-sm rounded {% if request.path == '/profit' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600 hover:bg-gray-100{% endif %}">{{ get_text('nav_profit') }}</a>
+                        <a href="/inventory?lang={{ lang }}" class="px-3 py-2 text-sm rounded {% if request.path == '/inventory' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600 hover:bg-gray-100{% endif %}">{{ get_text('nav_inventory') }}</a>
+                        <a href="/reviews?lang={{ lang }}" class="px-3 py-2 text-sm rounded {% if request.path == '/reviews' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600 hover:bg-gray-100{% endif %}">{{ get_text('nav_reviews') }}</a>
+                        <a href="/analytics?lang={{ lang }}" class="px-3 py-2 text-sm rounded {% if request.path == '/analytics' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600 hover:bg-gray-100{% endif %}">{{ get_text('analytics_page_title') }}</a>
+                        <a href="/tasks?lang={{ lang }}" class="px-3 py-2 text-sm rounded {% if request.path == '/tasks' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600 hover:bg-gray-100{% endif %}">{{ get_text('task_queue') }}</a>
+                        <a href="/schedule?lang={{ lang }}" class="px-3 py-2 text-sm rounded {% if request.path == '/schedule' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600 hover:bg-gray-100{% endif %}">{{ get_text('schedule_management') }}</a>
+                        <a href="/notifications?lang={{ lang }}" class="px-3 py-2 text-sm rounded {% if request.path == '/notifications' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600 hover:bg-gray-100{% endif %}">{{ get_text('nav_notifications') }}</a>
+                        <a href="/price-optimizer?lang={{ lang }}" class="px-3 py-2 text-sm rounded {% if request.path == '/price-optimizer' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600 hover:bg-gray-100{% endif %}">{{ get_text('price_optimization') }}</a>
+                        {% if current_user and current_user.role == 'admin' %}
+                        <a href="/admin?lang={{ lang }}" class="px-3 py-2 text-sm rounded {% if request.path == '/admin' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600 hover:bg-gray-100{% endif %}">{{ get_text('admin') }}</a>
+                        {% endif %}
                     </div>
                 </div>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            {% if current_user %}
+            <div class="relative" x-data="{ open: false }">
+                <button @click="open = !open" @click.away="open = false" class="flex items-center space-x-2 px-3 py-1 text-sm rounded text-gray-600 hover:bg-gray-100">
+                    <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center">
+                        <span class="text-white text-xs font-bold">{{ current_user.username[0]|upper }}</span>
+                    </div>
+                    <span class="hidden sm:inline">{{ current_user.username }}</span>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div x-show="open" x-transition class="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg py-1 z-50 border">
+                    <div class="px-4 py-2 border-b">
+                        <p class="text-sm font-medium text-gray-900">{{ current_user.username }}</p>
+                        <p class="text-xs text-gray-500">{{ get_text(current_user.role) }}</p>
+                    </div>
+                    {% if current_user.role == 'admin' %}
+                    <a href="/admin?lang={{ lang }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                        ⚙️ {{ get_text('admin_dashboard') }}
+                    </a>
+                    {% endif %}
+                    <a href="/logout?lang={{ lang }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                        {{ '登出' if lang == 'cn' else 'Logout' }}
+                    </a>
+                </div>
+            </div>
+            {% else %}
+            <div class="flex space-x-2">
+                <a href="/login?lang={{ lang }}" class="px-3 py-1 text-sm rounded text-purple-600 hover:bg-purple-50 border border-purple-200">
+                    {{ '登录' if lang == 'cn' else 'Login' }}
+                </a>
+            </div>
+            {% endif %}
+            <div class="flex space-x-2">
+                <a href="?lang=cn" class="px-3 py-1 text-sm rounded {% if lang == 'cn' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600 hover:bg-gray-100{% endif %}">中文</a>
+                <a href="?lang=en" class="px-3 py-1 text-sm rounded {% if lang == 'en' %}bg-purple-100 text-purple-700 font-medium{% else %}text-gray-600 hover:bg-gray-100{% endif %}">English</a>
             </div>
         </div>
     </nav>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:pt-16">
         {% block content %}{% endblock %}
     </main>
 
@@ -65,5 +245,461 @@
             </p>
         </div>
     </footer>
+
+    <!-- Mobile Menu Script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const menuToggle = document.getElementById('menu-toggle');
+            const menuClose = document.getElementById('menu-close');
+            const mobileMenu = document.getElementById('mobile-menu');
+            const menuOverlay = document.getElementById('menu-overlay');
+
+            function openMenu() {
+                mobileMenu.classList.add('active');
+                menuOverlay.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
+
+            function closeMenu() {
+                mobileMenu.classList.remove('active');
+                menuOverlay.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+
+            if (menuToggle) {
+                menuToggle.addEventListener('click', openMenu);
+            }
+
+            if (menuClose) {
+                menuClose.addEventListener('click', closeMenu);
+            }
+
+            if (menuOverlay) {
+                menuOverlay.addEventListener('click', closeMenu);
+            }
+
+            // Close menu on link click
+            const menuLinks = mobileMenu.querySelectorAll('a');
+            menuLinks.forEach(function(link) {
+                link.addEventListener('click', closeMenu);
+            });
+
+            // Handle swipe to close
+            let touchStartX = 0;
+            let touchEndX = 0;
+
+            mobileMenu.addEventListener('touchstart', function(e) {
+                touchStartX = e.changedTouches[0].screenX;
+            }, { passive: true });
+
+            mobileMenu.addEventListener('touchend', function(e) {
+                touchEndX = e.changedTouches[0].screenX;
+                if (touchStartX - touchEndX > 100) {
+                    closeMenu();
+                }
+            }, { passive: true });
+        });
+    </script>
+    <!-- Offline Indicator Banner -->
+    <div id="offline-banner" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-yellow-500 text-yellow-900 px-6 py-3 rounded-lg shadow-lg hidden z-50">
+        <div class="flex items-center space-x-3">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414"></path>
+            </svg>
+            <span id="offline-text">{{ get_text('offline_indicator') | default('您已离线') }}</span>
+        </div>
+    </div>
+
+    <!-- PWA Install Banner -->
+    <div id="pwa-install-banner" class="fixed bottom-0 left-0 right-0 bg-white shadow-2xl border-t border-gray-200 p-4 z-50 transform translate-y-full transition-transform duration-500 ease-out md:max-w-md md:left-auto md:right-4 md:rounded-xl md:mb-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center flex-1 min-w-0">
+                <div class="w-12 h-12 gradient-bg rounded-xl flex items-center justify-center flex-shrink-0">
+                    <span class="text-white font-bold text-xl">🚀</span>
+                </div>
+                <div class="ml-3 min-w-0">
+                    <h3 class="text-base font-semibold text-gray-900 truncate">{{ get_text('install_app') }}</h3>
+                    <p class="text-sm text-gray-500 truncate">{{ get_text('add_to_home_screen') }}</p>
+                </div>
+            </div>
+            <div class="flex items-center ml-3 flex-shrink-0">
+                <button id="pwa-install-btn" class="gradient-bg text-white px-4 py-2 rounded-lg font-medium text-sm hover:opacity-90 active:opacity-80 transition-opacity">
+                    {{ get_text('add_to_home_screen') }}
+                </button>
+                <button id="pwa-install-guide-btn" class="bg-purple-100 text-purple-700 px-3 py-2 rounded-lg font-medium text-sm hover:bg-purple-200 active:opacity-80 transition-opacity ml-2" title="{{ '安装指南' if lang == 'cn' else 'Install Guide' }}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </button>
+                <button id="pwa-dismiss-btn" class="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-gray-100 active:bg-gray-200 ml-2" aria-label="{{ get_text('not_now') }}">
+                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PWA Install Guide Modal -->
+    <div id="pwa-install-modal" class="fixed inset-0 bg-black bg-opacity-50 z-[100] hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-bold text-gray-900">{{ '🚀 安装到桌面' if lang == 'cn' else '🚀 Install to Home Screen' }}</h2>
+                    <button id="pwa-modal-close" class="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-gray-100 active:bg-gray-200">
+                        <svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- WeChat Detection Notice -->
+                <div id="wechat-notice" class="hidden mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+                    <div class="flex items-start">
+                        <svg class="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-semibold text-yellow-800">{{ '⚠️ 检测到微信浏览器' if lang == 'cn' else '⚠️ WeChat Browser Detected' }}</h3>
+                            <p class="text-sm text-yellow-700 mt-1">{{ '建议使用系统浏览器打开以获得最佳安装体验' if lang == 'cn' else 'Recommended to open in system browser for best install experience' }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- QR Code Section -->
+                <div id="qr-section" class="mb-6 p-4 bg-gray-50 rounded-xl">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-3 text-center">{{ '📱 扫描二维码安装' if lang == 'cn' else '📱 Scan QR Code to Install' }}</h3>
+                    <div class="flex justify-center mb-3">
+                        <div id="qrcode" class="bg-white p-3 rounded-xl shadow-sm"></div>
+                    </div>
+                    <p class="text-xs text-gray-500 text-center">{{ '使用微信/浏览器扫描上方二维码' if lang == 'cn' else 'Scan with WeChat/Browser QR scanner' }}</p>
+                </div>
+
+                <!-- Android APK Download -->
+                <div id="apk-section" class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                    <h3 class="text-sm font-semibold text-blue-800 mb-2">{{ '📦 Android APK 下载' if lang == 'cn' else '📦 Android APK Download' }}</h3>
+                    <p class="text-xs text-blue-600 mb-3">{{ '适用于Android设备的独立安装包' if lang == 'cn' else 'Standalone installer for Android devices' }}</p>
+                    <button id="apk-download-btn" class="w-full bg-blue-600 text-white py-2.5 px-4 rounded-lg font-medium text-sm hover:bg-blue-700 active:bg-blue-800 transition-colors flex items-center justify-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                        {{ '下载 APK (即将推出)' if lang == 'cn' else 'Download APK (Coming Soon)' }}
+                    </button>
+                </div>
+
+                <!-- Standard Browser Install Steps -->
+                <div class="mb-4">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-3">{{ '🌐 标准浏览器安装步骤' if lang == 'cn' else '🌐 Standard Browser Install Steps' }}</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-start">
+                            <div class="w-7 h-7 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                <span class="text-purple-600 font-bold text-sm">1</span>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm font-medium text-gray-800">{{ 'Chrome/Safari/Edge' if lang == 'cn' else 'Chrome/Safari/Edge' }}</p>
+                                <p class="text-xs text-gray-500">{{ '点击上方"添加到主屏幕"按钮' if lang == 'cn' else 'Tap the "Add to Home Screen" button above' }}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="w-7 h-7 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                <span class="text-purple-600 font-bold text-sm">2</span>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm font-medium text-gray-800">{{ '确认安装' if lang == 'cn' else 'Confirm Installation' }}</p>
+                                <p class="text-xs text-gray-500">{{ '在弹出对话框中点击"添加"' if lang == 'cn' else 'Tap "Add" in the popup dialog' }}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="w-7 h-7 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                <span class="text-purple-600 font-bold text-sm">3</span>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm font-medium text-gray-800">{{ '完成！' if lang == 'cn' else 'Complete!' }}</p>
+                                <p class="text-xs text-gray-500">{{ '应用将出现在主屏幕上' if lang == 'cn' else 'App will appear on your home screen' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WeChat Install Steps -->
+                <div class="p-4 bg-green-50 border border-green-200 rounded-xl">
+                    <h3 class="text-sm font-semibold text-green-800 mb-3">💚 {{ '微信中安装步骤' if lang == 'cn' else 'WeChat Install Steps' }}</h3>
+                    <div class="space-y-2 text-xs text-green-700">
+                        <p class="flex items-start"><span class="mr-2">①</span>{{ '在微信中打开此页面' if lang == 'cn' else 'Open this page in WeChat' }}</p>
+                        <p class="flex items-start"><span class="mr-2">②</span>{{ '点击右上角菜单按钮 (...)' if lang == 'cn' else 'Tap the menu button (...) in top right' }}</p>
+                        <p class="flex items-start"><span class="mr-2">③</span>{{ '选择"在浏览器中打开"' if lang == 'cn' else 'Select "Open in Browser"' }}</p>
+                        <p class="flex items-start"><span class="mr-2">④</span>{{ '然后按标准浏览器步骤安装' if lang == 'cn' else 'Then follow the standard browser steps above' }}</p>
+                    </div>
+                    <div class="mt-3 p-2 bg-white rounded-lg border border-green-200">
+                        <p class="text-xs text-green-600 text-center">{{ '微信中打开，点击右上角菜单，选择"添加到桌面"' if lang == 'cn' else 'In WeChat, open this page, tap menu → Add to Desktop' }}</p>
+                    </div>
+                </div>
+
+                <!-- Manual Install Button -->
+                <button id="pwa-install-manual-btn" class="w-full mt-4 gradient-bg text-white py-3 px-4 rounded-xl font-medium text-sm hover:opacity-90 active:opacity-80 transition-opacity">
+                    {{ '立即安装到主屏幕' if lang == 'cn' else 'Install Now to Home Screen' }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Service Worker Registration -->
+    <script>
+        const lang = "{{ lang }}";
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/static/sw.js')
+                    .then(function(registration) {
+                        console.log('ServiceWorker registered successfully:', registration.scope);
+
+                        registration.addEventListener('updatefound', function() {
+                            const newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', function() {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    if (confirm('有新版本可用，是否立即更新？\n\nNew version available. Update now?')) {
+                                        newWorker.postMessage({ type: 'SKIP_WAITING' });
+                                        window.location.reload();
+                                    }
+                                }
+                            });
+                        });
+                    })
+                    .catch(function(error) {
+                        console.log('ServiceWorker registration failed:', error);
+                    });
+
+                let refreshing = false;
+                navigator.serviceWorker.addEventListener('controllerchange', function() {
+                    if (!refreshing) {
+                        refreshing = true;
+                        window.location.reload();
+                    }
+                });
+            });
+        }
+
+        // Offline detection
+        const offlineBanner = document.getElementById('offline-banner');
+
+        function updateOnlineStatus() {
+            if (navigator.onLine) {
+                offlineBanner.classList.add('hidden');
+                offlineBanner.classList.remove('flex');
+            } else {
+                offlineBanner.classList.remove('hidden');
+                offlineBanner.classList.add('flex');
+            }
+        }
+
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+
+        if (!navigator.onLine) {
+            updateOnlineStatus();
+        }
+
+        // PWA Install Prompt
+        let deferredPrompt = null;
+        const pwaBanner = document.getElementById('pwa-install-banner');
+        const installBtn = document.getElementById('pwa-install-btn');
+        const dismissBtn = document.getElementById('pwa-dismiss-btn');
+        const INSTALL_DISMISSED_KEY = 'pwa_install_dismissed';
+
+        function showInstallBanner() {
+            if (pwaBanner && !localStorage.getItem(INSTALL_DISMISSED_KEY)) {
+                pwaBanner.classList.remove('translate-y-full');
+                pwaBanner.classList.add('translate-y-0');
+            }
+        }
+
+        function hideInstallBanner() {
+            if (pwaBanner) {
+                pwaBanner.classList.remove('translate-y-0');
+                pwaBanner.classList.add('translate-y-full');
+            }
+        }
+
+        function handleInstallClick() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then(function(choiceResult) {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('PWA install accepted');
+                        fetch('/api/analytics', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ event: 'pwa_install', action: 'accepted' })
+                        }).catch(function() {});
+                    } else {
+                        console.log('PWA install dismissed');
+                        fetch('/api/analytics', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ event: 'pwa_install', action: 'dismissed_by_choice' })
+                        }).catch(function() {});
+                    }
+                    deferredPrompt = null;
+                    hideInstallBanner();
+                });
+            }
+        }
+
+        function handleDismissClick() {
+            localStorage.setItem(INSTALL_DISMISSED_KEY, 'true');
+            fetch('/api/analytics', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ event: 'pwa_banner', action: 'dismissed' })
+            }).catch(function() {});
+            hideInstallBanner();
+        }
+
+        window.addEventListener('beforeinstallprompt', function(e) {
+            e.preventDefault();
+            deferredPrompt = e;
+            setTimeout(showInstallBanner, 3000);
+        });
+
+        window.addEventListener('appinstalled', function() {
+            console.log('PWA installed successfully');
+            localStorage.removeItem(INSTALL_DISMISSED_KEY);
+            hideInstallBanner();
+            fetch('/api/analytics', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ event: 'pwa_installed', action: 'success' })
+            }).catch(function() {});
+        });
+
+        if (installBtn) {
+            installBtn.addEventListener('click', handleInstallClick);
+        }
+
+        if (dismissBtn) {
+            dismissBtn.addEventListener('click', handleDismissClick);
+        }
+
+        // PWA Install Modal & QR Code
+        const installGuideBtn = document.getElementById('pwa-install-guide-btn');
+        const pwaModal = document.getElementById('pwa-install-modal');
+        const modalCloseBtn = document.getElementById('pwa-modal-close');
+        const manualInstallBtn = document.getElementById('pwa-install-manual-btn');
+        const apkDownloadBtn = document.getElementById('apk-download-btn');
+        const wechatNotice = document.getElementById('wechat-notice');
+
+        function isWeChatBrowser() {
+            return /MicroMessenger/i.test(navigator.userAgent) && !/wxwork/i.test(navigator.userAgent);
+        }
+
+        function openInstallModal() {
+            if (pwaModal) {
+                pwaModal.classList.remove('hidden');
+                pwaModal.classList.add('flex');
+                document.body.style.overflow = 'hidden';
+                generateQRCode();
+                if (isWeChatBrowser() && wechatNotice) {
+                    wechatNotice.classList.remove('hidden');
+                }
+            }
+        }
+
+        function closeInstallModal() {
+            if (pwaModal) {
+                pwaModal.classList.add('hidden');
+                pwaModal.classList.remove('flex');
+                document.body.style.overflow = '';
+            }
+        }
+
+        function generateQRCode() {
+            const qrContainer = document.getElementById('qrcode');
+            if (!qrContainer || qrContainer.querySelector('canvas')) return;
+            
+            const currentUrl = window.location.origin + window.location.pathname;
+            
+            // Simple QR code generation using canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = 150;
+            canvas.height = 150;
+            const ctx = canvas.getContext('2d');
+            
+            // QR Code matrix (simplified - in production use a proper library)
+            // Using a QR code library from CDN
+            if (typeof QRCode !== 'undefined') {
+                qrContainer.innerHTML = '';
+                new QRCode(qrContainer, {
+                    text: currentUrl,
+                    width: 150,
+                    height: 150,
+                    colorDark: '#667eea',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+            } else {
+                const cdnList = [
+                    'https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js',
+                    'https://cdn.bootcdn.net/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'
+                ];
+                let idx = 0;
+                function tryQRCDN() {
+                    if (idx >= cdnList.length) return;
+                    const script = document.createElement('script');
+                    script.src = cdnList[idx];
+                    script.onload = function() {
+                        qrContainer.innerHTML = '';
+                        new QRCode(qrContainer, {
+                            text: currentUrl,
+                            width: 150,
+                            height: 150,
+                            colorDark: '#667eea',
+                            colorLight: '#ffffff',
+                            correctLevel: QRCode.CorrectLevel.M
+                        });
+                    };
+                    script.onerror = function() { idx++; tryQRCDN(); };
+                    document.head.appendChild(script);
+                }
+                tryQRCDN();
+            }
+        }
+
+        if (installGuideBtn) {
+            installGuideBtn.addEventListener('click', openInstallModal);
+        }
+
+        if (modalCloseBtn) {
+            modalCloseBtn.addEventListener('click', closeInstallModal);
+        }
+
+        if (pwaModal) {
+            pwaModal.addEventListener('click', function(e) {
+                if (e.target === pwaModal) {
+                    closeInstallModal();
+                }
+            });
+        }
+
+        if (manualInstallBtn) {
+            manualInstallBtn.addEventListener('click', function() {
+                if (deferredPrompt) {
+                    closeInstallModal();
+                    handleInstallClick();
+                } else {
+                    // Show instructions for manual install
+                    alert(lang === 'cn' ? 
+                        '请在浏览器菜单中选择"添加到主屏幕"或"安装应用"' : 
+                        'Please select "Add to Home Screen" or "Install App" from browser menu');
+                }
+            });
+        }
+
+        if (apkDownloadBtn) {
+            apkDownloadBtn.addEventListener('click', function() {
+                if (lang === 'cn') {
+                    alert('APK 下载即将推出，敬请期待！\n\n我们的技术团队正在准备 Android 安装包。');
+                } else {
+                    alert('APK download coming soon!\n\nOur team is preparing the Android installer.');
+                }
+            });
+        }
+    </script>
 </body>
 </html>

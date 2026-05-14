@@ -1,0 +1,474 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+<style>
+    .toggle-switch {
+        position: relative;
+        width: 48px;
+        height: 24px;
+        background: #e5e7eb;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: background 0.3s;
+    }
+    .toggle-switch.active {
+        background: #667eea;
+    }
+    .toggle-switch::after {
+        content: '';
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        background: white;
+        border-radius: 50%;
+        top: 2px;
+        left: 2px;
+        transition: transform 0.3s;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .toggle-switch.active::after {
+        transform: translateX(24px);
+    }
+    .international-badge {
+        background: linear-gradient(135deg, #6b7280, #9ca3af);
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
+        <div>
+            <h2 class="text-2xl sm:text-3xl font-bold text-gray-900">{{ get_text('notifications') }}</h2>
+            <p class="text-gray-600 mt-1 text-sm sm:text-base">{{ get_text('notification_preferences') }}</p>
+        </div>
+    </div>
+
+    <form id="notification-form" class="space-y-6">
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">{{ get_text('email_notifications') }}</h3>
+
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-gray-700">{{ get_text('email_notifications') }}</span>
+                <div class="toggle-switch {% if preferences.email_enabled %}active{% endif %}" data-field="email_enabled" onclick="toggleSwitch(this)"></div>
+                <input type="hidden" name="email_enabled" value="{{ 'true' if preferences.email_enabled else 'false' }}">
+            </div>
+
+            <div id="email-settings" class="space-y-4 {% if not preferences.email_enabled %}opacity-50 pointer-events-none{% endif %}">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ get_text('email_address') }}</label>
+                    <input type="email" name="email_address" value="{{ preferences.email_address }}"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                           placeholder="your@email.com">
+                </div>
+
+                <div class="border-t border-gray-200 pt-4 mt-4">
+                    <h4 class="text-sm font-semibold text-gray-700 mb-3">{{ get_text('smtp_settings') }}</h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">{{ get_text('smtp_host') }}</label>
+                            <input type="text" name="smtp_host" value="{{ preferences.smtp_host }}"
+                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                   placeholder="smtp.gmail.com">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">{{ get_text('smtp_port') }}</label>
+                            <input type="number" name="smtp_port" value="{{ preferences.smtp_port }}"
+                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                   placeholder="587">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">{{ get_text('smtp_username') }}</label>
+                            <input type="text" name="smtp_username" value="{{ preferences.smtp_username }}"
+                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">{{ get_text('smtp_password') }}</label>
+                            <input type="password" name="smtp_password" value="{{ preferences.smtp_password }}"
+                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
+                    <span class="text-white text-xl">💬</span>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900">{{ get_text('wechat_notifications') }}</h3>
+                    <p class="text-xs text-gray-500">企业微信 - 适用于中国大陆用户</p>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-gray-700">{{ get_text('enable_wechat') }}</span>
+                <div class="toggle-switch {% if preferences.wechat_enabled %}active{% endif %}" data-field="wechat_enabled" onclick="toggleSwitch(this)"></div>
+                <input type="hidden" name="wechat_enabled" value="{{ 'true' if preferences.wechat_enabled else 'false' }}">
+            </div>
+
+            <div id="wechat-settings" class="space-y-4 {% if not preferences.wechat_enabled %}opacity-50 pointer-events-none{% endif %}">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ get_text('wechat_webhook_url') }}</label>
+                    <input type="url" name="wechat_webhook_url" value="{{ preferences.wechat_webhook_url }}"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                           placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...">
+                    <p class="mt-1 text-xs text-gray-500">{{ get_text('wechat_webhook_help') }}</p>
+                </div>
+
+                <div class="flex items-center gap-3 pt-2">
+                    <button type="button" id="test-wechat-btn" class="px-4 py-2 bg-green-100 text-green-700 font-medium rounded-lg hover:bg-green-200 transition-colors text-sm">
+                        {{ get_text('send_wechat_test') }}
+                    </button>
+                    <div id="wechat-status" class="text-sm text-gray-500"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-700 rounded-lg flex items-center justify-center">
+                    <span class="text-white text-xl">🔔</span>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900">{{ get_text('dingtalk_notifications') }}</h3>
+                    <p class="text-xs text-gray-500">钉钉 - 适用于中国大陆用户</p>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-gray-700">{{ get_text('enable_dingtalk') }}</span>
+                <div class="toggle-switch {% if preferences.dingtalk_enabled %}active{% endif %}" data-field="dingtalk_enabled" onclick="toggleSwitch(this)"></div>
+                <input type="hidden" name="dingtalk_enabled" value="{{ 'true' if preferences.dingtalk_enabled else 'false' }}">
+            </div>
+
+            <div id="dingtalk-settings" class="space-y-4 {% if not preferences.dingtalk_enabled %}opacity-50 pointer-events-none{% endif %}">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ get_text('dingtalk_webhook_url') }}</label>
+                    <input type="url" name="dingtalk_webhook_url" value="{{ preferences.dingtalk_webhook_url }}"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                           placeholder="https://oapi.dingtalk.com/robot/send?access_token=...">
+                    <p class="mt-1 text-xs text-gray-500">{{ get_text('dingtalk_webhook_help') }}</p>
+                </div>
+
+                <div class="flex items-center gap-3 pt-2">
+                    <button type="button" id="test-dingtalk-btn" class="px-4 py-2 bg-blue-100 text-blue-700 font-medium rounded-lg hover:bg-blue-200 transition-colors text-sm">
+                        {{ get_text('send_dingtalk_test') }}
+                    </button>
+                    <div id="dingtalk-status" class="text-sm text-gray-500"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md border border-gray-200 p-4 sm:p-6 opacity-75">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                    <span class="text-white text-xl">💬</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <h3 class="text-lg font-bold text-gray-700">{{ get_text('slack_notifications') }}</h3>
+                    <span class="international-badge">{{ get_text('international_only') }}</span>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-gray-600">{{ get_text('slack_notifications_desc') }}</span>
+                <div class="toggle-switch {% if preferences.slack_enabled %}active{% endif %}" data-field="slack_enabled" onclick="toggleSwitch(this)"></div>
+                <input type="hidden" name="slack_enabled" value="{{ 'true' if preferences.slack_enabled else 'false' }}">
+            </div>
+
+            <div id="slack-settings" class="{% if not preferences.slack_enabled %}opacity-50 pointer-events-none{% endif %}">
+                <label class="block text-sm font-medium text-gray-600 mb-1">{{ get_text('webhook_url') }}</label>
+                <input type="url" name="slack_webhook_url" value="{{ preferences.slack_webhook_url }}"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                       placeholder="https://hooks.slack.com/services/...">
+                <p class="mt-1 text-xs text-gray-400">{{ get_text('slack_webhook_help') }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">{{ get_text('notification_preferences') }}</h3>
+
+            <div class="space-y-4">
+                <div class="flex items-center justify-between">
+                    <span class="text-gray-700">{{ get_text('notification_low_stock') }}</span>
+                    <div class="toggle-switch {% if preferences.notify_low_stock %}active{% endif %}" data-field="notify_low_stock" onclick="toggleSwitch(this)"></div>
+                    <input type="hidden" name="notify_low_stock" value="{{ 'true' if preferences.notify_low_stock else 'false' }}">
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <span class="text-gray-700">{{ get_text('notification_reviews') }}</span>
+                    <div class="toggle-switch {% if preferences.notify_reviews %}active{% endif %}" data-field="notify_reviews" onclick="toggleSwitch(this)"></div>
+                    <input type="hidden" name="notify_reviews" value="{{ 'true' if preferences.notify_reviews else 'false' }}">
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <span class="text-gray-700">{{ get_text('notification_tasks') }}</span>
+                    <div class="toggle-switch {% if preferences.notify_tasks %}active{% endif %}" data-field="notify_tasks" onclick="toggleSwitch(this)"></div>
+                    <input type="hidden" name="notify_tasks" value="{{ 'true' if preferences.notify_tasks else 'false' }}">
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">{{ get_text('notification_frequency') }}</h3>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors {% if preferences.frequency == 'immediate' %}border-purple-500 bg-purple-50{% endif %}">
+                    <input type="radio" name="frequency" value="immediate" {% if preferences.frequency == 'immediate' %}checked{% endif %}
+                           class="mr-3 text-purple-600 focus:ring-purple-500" onchange="updateFrequencyStyle(this)">
+                    <span class="text-sm font-medium text-gray-700">{{ get_text('notification_immediate') }}</span>
+                </label>
+                <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors {% if preferences.frequency == 'hourly_digest' %}border-purple-500 bg-purple-50{% endif %}">
+                    <input type="radio" name="frequency" value="hourly_digest" {% if preferences.frequency == 'hourly_digest' %}checked{% endif %}
+                           class="mr-3 text-purple-600 focus:ring-purple-500" onchange="updateFrequencyStyle(this)">
+                    <span class="text-sm font-medium text-gray-700">{{ get_text('notification_hourly') }}</span>
+                </label>
+                <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors {% if preferences.frequency == 'daily_digest' %}border-purple-500 bg-purple-50{% endif %}">
+                    <input type="radio" name="frequency" value="daily_digest" {% if preferences.frequency == 'daily_digest' %}checked{% endif %}
+                           class="mr-3 text-purple-600 focus:ring-purple-500" onchange="updateFrequencyStyle(this)">
+                    <span class="text-sm font-medium text-gray-700">{{ get_text('notification_daily') }}</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-3">
+            <button type="submit" class="flex-1 sm:flex-none px-6 py-3 gradient-bg text-white font-semibold rounded-lg hover:opacity-90 transition-opacity">
+                {{ get_text('save_settings') }}
+            </button>
+            <button type="button" id="test-btn" class="flex-1 sm:flex-none px-6 py-3 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200 transition-colors">
+                {{ get_text('send_test') }}
+            </button>
+        </div>
+    </form>
+
+    <div id="test-result" class="mt-4 hidden"></div>
+
+    {% if queue and queue|length > 0 %}
+    <div class="mt-8 bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">{{ get_text('notification_queue') }} ({{ queue|length }})</h3>
+        <div class="space-y-3">
+            {% for item in queue %}
+            <div class="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <span class="px-2 py-1 text-xs font-semibold rounded
+                            {% if item.type == 'low_stock' %}bg-red-100 text-red-700
+                            {% elif item.type == 'review_alert' %}bg-orange-100 text-orange-700
+                            {% elif item.type == 'task_complete' %}bg-green-100 text-green-700
+                            {% else %}bg-blue-100 text-blue-700{% endif %}">
+                            {{ item.type }}
+                        </span>
+                        <p class="mt-2 text-sm font-medium text-gray-900">{{ item.title }}</p>
+                        <p class="text-xs text-gray-500 mt-1">{{ item.created_at }}</p>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="mt-8 bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">{{ get_text('notification_history') }}</h3>
+        {% if history and history|length > 0 %}
+        <div class="space-y-3">
+            {% for item in history %}
+            <div class="p-3 border border-gray-200 rounded-lg {% if item.sent %}bg-green-50{% else %}bg-red-50{% endif %}">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="px-2 py-1 text-xs font-semibold rounded
+                                {% if item.type == 'low_stock' %}bg-red-100 text-red-700
+                                {% elif item.type == 'review_alert' %}bg-orange-100 text-orange-700
+                                {% elif item.type == 'task_complete' %}bg-green-100 text-green-700
+                                {% elif item.type == 'daily_summary' %}bg-blue-100 text-blue-700
+                                {% else %}bg-gray-100 text-gray-700{% endif %}">
+                                {{ item.type }}
+                            </span>
+                            <span class="px-2 py-1 text-xs font-semibold rounded
+                                {% if item.sent %}bg-green-100 text-green-700{% else %}bg-red-100 text-red-700{% endif %}">
+                                {{ 'Sent' if item.sent else 'Failed' }}
+                            </span>
+                        </div>
+                        <p class="mt-2 text-sm font-medium text-gray-900">{{ item.title }}</p>
+                        <p class="text-xs text-gray-500 mt-1">{{ item.created_at }}</p>
+                        {% if item.error %}
+                        <p class="text-xs text-red-500 mt-1">Error: {{ item.error }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-gray-500 text-center py-4">{{ get_text('notification_no_history') }}</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function toggleSwitch(element) {
+    element.classList.toggle('active');
+    const fieldName = element.dataset.field;
+    const hiddenInput = element.nextElementSibling;
+    const isActive = element.classList.contains('active');
+    hiddenInput.value = isActive ? 'true' : 'false';
+
+    if (fieldName === 'email_enabled') {
+        document.getElementById('email-settings').classList.toggle('opacity-50', !isActive);
+        document.getElementById('email-settings').classList.toggle('pointer-events-none', !isActive);
+    } else if (fieldName === 'slack_enabled') {
+        document.getElementById('slack-settings').classList.toggle('opacity-50', !isActive);
+        document.getElementById('slack-settings').classList.toggle('pointer-events-none', !isActive);
+    } else if (fieldName === 'wechat_enabled') {
+        document.getElementById('wechat-settings').classList.toggle('opacity-50', !isActive);
+        document.getElementById('wechat-settings').classList.toggle('pointer-events-none', !isActive);
+    } else if (fieldName === 'dingtalk_enabled') {
+        document.getElementById('dingtalk-settings').classList.toggle('opacity-50', !isActive);
+        document.getElementById('dingtalk-settings').classList.toggle('pointer-events-none', !isActive);
+    }
+}
+
+function updateFrequencyStyle(element) {
+    document.querySelectorAll('input[name="frequency"]').forEach(radio => {
+        const label = radio.closest('label');
+        if (radio.checked) {
+            label.classList.add('border-purple-500', 'bg-purple-50');
+        } else {
+            label.classList.remove('border-purple-500', 'bg-purple-50');
+        }
+    });
+}
+
+document.getElementById('notification-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = {};
+    formData.forEach((value, key) => {
+        data[key] = value === 'true' ? true : (value === 'false' ? false : value);
+    });
+
+    try {
+        const response = await fetch('/api/notifications/preferences', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await response.json();
+
+        const resultDiv = document.getElementById('test-result');
+        resultDiv.classList.remove('hidden');
+        resultDiv.className = 'mt-4 p-4 rounded-lg ' + (result.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700');
+        resultDiv.textContent = result.message;
+
+        setTimeout(() => resultDiv.classList.add('hidden'), 3000);
+    } catch (error) {
+        console.error('Error saving preferences:', error);
+    }
+});
+
+document.getElementById('test-btn').addEventListener('click', async function() {
+    const btn = this;
+    btn.disabled = true;
+    btn.textContent = '...';
+
+    try {
+        const response = await fetch('/api/notifications/test?lang={{ lang }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await response.json();
+
+        const resultDiv = document.getElementById('test-result');
+        resultDiv.classList.remove('hidden');
+        resultDiv.className = 'mt-4 p-4 rounded-lg ' + (result.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700');
+        resultDiv.textContent = result.message;
+
+        setTimeout(() => resultDiv.classList.add('hidden'), 5000);
+    } catch (error) {
+        console.error('Error sending test notification:', error);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '{{ get_text('send_test') }}';
+    }
+});
+
+document.getElementById('test-wechat-btn').addEventListener('click', async function() {
+    const btn = this;
+    const statusDiv = document.getElementById('wechat-status');
+    btn.disabled = true;
+    btn.textContent = '...';
+
+    try {
+        const response = await fetch('/api/notifications/test/wechat?lang={{ lang }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            statusDiv.textContent = '✅ {{ get_text("test_sent_success") }}';
+            statusDiv.className = 'text-sm text-green-600';
+        } else {
+            statusDiv.textContent = '❌ ' + (result.message || '{{ get_text("test_sent_failed") }}');
+            statusDiv.className = 'text-sm text-red-600';
+        }
+
+        setTimeout(() => {
+            statusDiv.textContent = '';
+        }, 5000);
+    } catch (error) {
+        console.error('Error sending WeChat test:', error);
+        statusDiv.textContent = '❌ {{ get_text("test_sent_failed") }}';
+        statusDiv.className = 'text-sm text-red-600';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '{{ get_text('send_wechat_test') }}';
+    }
+});
+
+document.getElementById('test-dingtalk-btn').addEventListener('click', async function() {
+    const btn = this;
+    const statusDiv = document.getElementById('dingtalk-status');
+    btn.disabled = true;
+    btn.textContent = '...';
+
+    try {
+        const response = await fetch('/api/notifications/test/dingtalk?lang={{ lang }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            statusDiv.textContent = '✅ {{ get_text("test_sent_success") }}';
+            statusDiv.className = 'text-sm text-green-600';
+        } else {
+            statusDiv.textContent = '❌ ' + (result.message || '{{ get_text("test_sent_failed") }}');
+            statusDiv.className = 'text-sm text-red-600';
+        }
+
+        setTimeout(() => {
+            statusDiv.textContent = '';
+        }, 5000);
+    } catch (error) {
+        console.error('Error sending DingTalk test:', error);
+        statusDiv.textContent = '❌ {{ get_text("test_sent_failed") }}';
+        statusDiv.className = 'text-sm text-red-600';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '{{ get_text('send_dingtalk_test') }}';
+    }
+});
+</script>
+{% endblock %}

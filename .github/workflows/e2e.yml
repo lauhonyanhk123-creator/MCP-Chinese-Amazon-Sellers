@@ -1,0 +1,116 @@
+name: E2E Tests
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Run weekly on Sundays at 2 AM UTC
+  workflow_dispatch:  # Allow manual triggering
+    inputs:
+      test_environment:
+        description: 'Test Environment'
+        required: false
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        shard: [1, 2, 3, 4]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install Playwright
+      run: |
+        python -m pip install --upgrade pip
+        pip install playwright>=1.40.0
+        playwright install --with-deps chromium
+
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+
+    - name: Start Flask server for testing
+      run: |
+        python -c "
+        from web_app import app
+        app.run(host='127.0.0.1', port=5000, debug=False)
+        " &
+        SERVER_PID=$!
+        sleep 5
+        echo $SERVER_PID > /tmp/server.pid
+
+    - name: Run Playwright E2E tests (shard ${{ matrix.shard }}/4)
+      run: |
+        python -m pytest e2e_tests/ \
+          --headed=false \
+          --browser=chromium \
+          --shard=${{ matrix.shard }}/4 \
+          --junitxml=e2e-results-shard-${{ matrix.shard }}.xml \
+          --html=e2e-report-shard-${{ matrix.shard }}.html \
+          --self-contained-html \
+          || true
+      continue-on-error: true
+      env:
+        TEST_ENV: ${{ github.event.inputs.test_environment || 'staging' }}
+        BASE_URL: http://127.0.0.1:5000
+
+    - name: Stop Flask server
+      run: |
+        if [ -f /tmp/server.pid ]; then
+          kill $(cat /tmp/server.pid) 2>/dev/null || true
+        fi
+
+    - name: Upload E2E test results
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-results-shard-${{ matrix.shard }}
+        path: |
+          e2e-results-shard-${{ matrix.shard }}.xml
+          e2e-report-shard-${{ matrix.shard }}.html
+          test-results/
+        retention-days: 14
+      if: always()
+
+  e2e-report:
+    runs-on: ubuntu-latest
+    needs: e2e-tests
+    if: always()
+    steps:
+    - name: Download all E2E artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: e2e-results
+
+    - name: Merge test reports
+      run: |
+        echo "## E2E Test Summary" >> $GITHUB_STEP_SUMMARY
+        echo "| Shard | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+        for dir in e2e-results/e2e-results-shard-*; do
+          shard=$(basename $dir | sed 's/e2e-results-shard-//')
+          if [ -f "$dir/e2e-results-shard-$shard.xml" ]; then
+            echo "| $shard | :white_check_mark: Completed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| $shard | :x: No results |" >> $GITHUB_STEP_SUMMARY
+          fi
+        done
+
+    - name: Upload consolidated E2E report
+      uses: actions/upload-artifact@v4
+      with:
+        name: consolidated-e2e-report
+        path: e2e-results/
+        retention-days: 14

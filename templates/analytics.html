@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 lg:mb-8 gap-4">
+        <div>
+            <h2 class="text-2xl lg:text-3xl font-bold text-gray-900">{{ get_text('analytics_page_title') }}</h2>
+            <p class="text-gray-600 mt-1 text-sm lg:text-base">{{ get_text('analytics_date_range') }}: {{ days }} {{ get_text('days') if lang == 'en' else '天' }}</p>
+            {% if is_mock_data %}
+            <p class="text-yellow-600 text-sm mt-1">⚠️ Demo data - Connect API for real data</p>
+            {% endif %}
+        </div>
+        <div class="flex flex-wrap gap-2 w-full lg:w-auto lg:flex-nowrap lg:space-x-2">
+            <a href="/analytics?date_range=7d&lang={{ lang }}" class="flex-1 lg:flex-none px-3 py-2 rounded-lg text-sm font-medium transition-colors text-center {{ 'bg-blue-500 text-white' if date_range == '7d' else 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
+                {{ get_text('analytics_last_7_days') }}
+            </a>
+            <a href="/analytics?date_range=30d&lang={{ lang }}" class="flex-1 lg:flex-none px-3 py-2 rounded-lg text-sm font-medium transition-colors text-center {{ 'bg-blue-500 text-white' if date_range == '30d' else 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
+                {{ get_text('analytics_last_30_days') }}
+            </a>
+            <a href="/analytics?date_range=90d&lang={{ lang }}" class="flex-1 lg:flex-none px-3 py-2 rounded-lg text-sm font-medium transition-colors text-center {{ 'bg-blue-500 text-white' if date_range == '90d' else 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
+                {{ get_text('analytics_last_90_days') }}
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8">
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 card-hover">
+            <div class="flex items-center justify-between mb-3 sm:mb-4">
+                <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-lg flex items-center justify-center">
+                    <span class="text-white text-lg sm:text-xl">📋</span>
+                </div>
+            </div>
+            <p class="text-xs sm:text-sm text-gray-600 mb-1">{{ get_text('analytics_total_orders') }}</p>
+            <p class="text-2xl sm:text-3xl font-bold text-gray-900">{{ summary.total_orders }}</p>
+            <p class="text-xs text-gray-500 mt-2">{{ get_text('analytics_avg_daily_orders') }}: {{ summary.avg_daily_orders }}</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 card-hover">
+            <div class="flex items-center justify-between mb-3 sm:mb-4">
+                <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg flex items-center justify-center">
+                    <span class="text-white text-lg sm:text-xl">💰</span>
+                </div>
+            </div>
+            <p class="text-xs sm:text-sm text-gray-600 mb-1">{{ get_text('analytics_total_revenue') }}</p>
+            <p class="text-2xl sm:text-3xl font-bold text-gray-900">${{ summary.total_revenue }}</p>
+            <p class="text-xs text-gray-500 mt-2">{{ get_text('analytics_avg_order_value') }}: ${{ summary.avg_order_value }}</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 card-hover">
+            <div class="flex items-center justify-between mb-3 sm:mb-4">
+                <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-red-500 to-orange-500 rounded-lg flex items-center justify-center">
+                    <span class="text-white text-lg sm:text-xl">📦</span>
+                </div>
+                {% if summary.low_stock_critical > 0 %}
+                <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs font-semibold bg-red-100 text-red-700 rounded-full">{{ get_text('dashboard_critical') }}</span>
+                {% endif %}
+            </div>
+            <p class="text-xs sm:text-sm text-gray-600 mb-1">{{ get_text('analytics_low_stock_alerts') }}</p>
+            <p class="text-2xl sm:text-3xl font-bold text-gray-900">{{ summary.low_stock_critical + summary.low_stock_warning }}</p>
+            <p class="text-xs text-gray-500 mt-2">
+                <span class="text-red-600">{{ summary.low_stock_critical }} {{ get_text('dashboard_critical') if lang == 'en' else '紧急' }}</span> /
+                <span class="text-yellow-600">{{ summary.low_stock_warning }} {{ get_text('dashboard_warning') if lang == 'en' else '警告' }}</span>
+            </p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 card-hover">
+            <div class="flex items-center justify-between mb-3 sm:mb-4">
+                <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-yellow-500 to-amber-500 rounded-lg flex items-center justify-center">
+                    <span class="text-white text-lg sm:text-xl">⭐</span>
+                </div>
+            </div>
+            <p class="text-xs sm:text-sm text-gray-600 mb-1">{{ get_text('analytics_review_alerts') }}</p>
+            <p class="text-2xl sm:text-3xl font-bold text-gray-900">{{ summary.total_reviews }}</p>
+            <p class="text-xs text-gray-500 mt-2">{{ get_text('analytics_reviews_by_rating') }}: {{ summary.avg_rating }}/5</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 mb-6">
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6">
+            <h3 class="text-base sm:text-lg font-bold text-gray-900 mb-3 sm:mb-4">{{ get_text('analytics_orders_trend') }}</h3>
+            <div class="chart-container" style="position: relative; height: 200px sm:height 300px;">
+                <canvas id="ordersChart"></canvas>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6">
+            <h3 class="text-base sm:text-lg font-bold text-gray-900 mb-3 sm:mb-4">{{ get_text('analytics_revenue_trend') }}</h3>
+            <div class="chart-container" style="position: relative; height: 200px sm:height 300px;">
+                <canvas id="revenueChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 mb-6">
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6">
+            <h3 class="text-base sm:text-lg font-bold text-gray-900 mb-3 sm:mb-4">{{ get_text('analytics_order_status') }}</h3>
+            <div class="chart-container" style="position: relative; height: 200px sm:height 300px;">
+                <canvas id="orderStatusChart"></canvas>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6">
+            <h3 class="text-base sm:text-lg font-bold text-gray-900 mb-3 sm:mb-4">{{ get_text('analytics_reviews_by_rating') }}</h3>
+            <div class="chart-container" style="position: relative; height: 200px sm:height 300px;">
+                <canvas id="reviewsChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ordersData = {{ orders_chart | tojson | safe }};
+    const revenueData = {{ revenue_chart | tojson | safe }};
+    const orderStatusData = {{ order_status_chart | tojson | safe }};
+    const reviewsData = {{ reviews_chart | tojson | safe }};
+
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'top',
+                labels: {
+                    boxWidth: 12,
+                    padding: 8,
+                    font: {
+                        size: 11
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                grid: {
+                    color: 'rgba(0, 0, 0, 0.05)'
+                },
+                ticks: {
+                    font: {
+                        size: 10
+                    }
+                }
+            },
+            x: {
+                grid: {
+                    display: false
+                },
+                ticks: {
+                    maxRotation: 45,
+                    minRotation: 45,
+                    font: {
+                        size: 10
+                    }
+                }
+            }
+        }
+    };
+
+    const pieOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'right',
+                labels: {
+                    boxWidth: 12,
+                    padding: 8,
+                    font: {
+                        size: 11
+                    }
+                }
+            }
+        }
+    };
+
+    new Chart(document.getElementById('ordersChart'), {
+        type: 'line',
+        data: ordersData,
+        options: chartOptions
+    });
+
+    new Chart(document.getElementById('revenueChart'), {
+        type: 'bar',
+        data: revenueData,
+        options: chartOptions
+    });
+
+    new Chart(document.getElementById('orderStatusChart'), {
+        type: 'doughnut',
+        data: orderStatusData,
+        options: pieOptions
+    });
+
+    new Chart(document.getElementById('reviewsChart'), {
+        type: 'bar',
+        data: reviewsData,
+        options: {
+            ...chartOptions,
+            indexAxis: 'y'
+        }
+    });
+});
+</script>
+
+<style>
+@media (max-width: 639px) {
+    .chart-container {
+        height: 200px !important;
+    }
+    .chart-container canvas {
+        max-height: 200px;
+    }
+}
+@media (min-width: 640px) {
+    .chart-container {
+        height: 300px !important;
+    }
+    .chart-container canvas {
+        max-height: 300px;
+    }
+}
+</style>
+{% endblock %}
