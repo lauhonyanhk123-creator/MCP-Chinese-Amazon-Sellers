@@ -3,17 +3,18 @@ Notification Service for Cross-Border Seller AI Assistant
 Supports Email (SMTP) and Slack webhook notifications
 """
 
-import smtplib
-import json
-import threading
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from datetime import datetime
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, field
-from enum import Enum
 import os
+import smtplib
+import threading
+from dataclasses import dataclass, field
+from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from enum import Enum
+from typing import Any
+
 import requests
+
 
 class NotificationType(Enum):
     LOW_STOCK = "low_stock"
@@ -52,17 +53,17 @@ class Notification:
     type: NotificationType
     title: str
     message: str
-    data: Dict[str, Any]
+    data: dict[str, Any]
     created_at: datetime = field(default_factory=datetime.now)
     sent: bool = False
-    sent_at: Optional[datetime] = None
-    error: Optional[str] = None
+    sent_at: datetime | None = None
+    error: str | None = None
 
 class NotificationTemplates:
     """Notification template system"""
 
     @staticmethod
-    def low_stock_alert(product: Dict[str, Any]) -> Dict[str, str]:
+    def low_stock_alert(product: dict[str, Any]) -> dict[str, str]:
         """Generate low stock alert notification content"""
         product_name = product.get('product_name', 'Unknown Product')
         sku = product.get('sku', 'N/A')
@@ -170,7 +171,7 @@ SKU: {sku}
         }
 
     @staticmethod
-    def review_alert(review: Dict[str, Any]) -> Dict[str, str]:
+    def review_alert(review: dict[str, Any]) -> dict[str, str]:
         """Generate review alert notification content"""
         product_name = review.get('product', 'Unknown Product')
         rating = review.get('rating', 0)
@@ -292,7 +293,7 @@ Action Required: Please review and respond to this feedback.
         }
 
     @staticmethod
-    def _wechat_format_review(review: Dict[str, Any], lang: str = 'en') -> Dict[str, Any]:
+    def _wechat_format_review(review: dict[str, Any], lang: str = 'en') -> dict[str, Any]:
         product_name = review.get('product', 'Unknown Product')
         rating = review.get('rating', 0)
         reviewer = review.get('reviewer', 'Anonymous')
@@ -334,7 +335,7 @@ Action Required: Please review and respond to this feedback.
         }
 
     @staticmethod
-    def _wechat_format_low_stock(product: Dict[str, Any], lang: str = 'en') -> Dict[str, Any]:
+    def _wechat_format_low_stock(product: dict[str, Any], lang: str = 'en') -> dict[str, Any]:
         product_name = product.get('product_name', 'Unknown Product')
         sku = product.get('sku', 'N/A')
         current_stock = product.get('current_stock', 0)
@@ -372,7 +373,7 @@ Action Required: Please review and respond to this feedback.
             }
 
     @staticmethod
-    def _wechat_format_task(task: Dict[str, Any], lang: str = 'en') -> Dict[str, Any]:
+    def _wechat_format_task(task: dict[str, Any], lang: str = 'en') -> dict[str, Any]:
         task_name = task.get('tool_name', 'Unknown Task')
         task_id = task.get('task_id', 'N/A')
         result_summary = task.get('result_summary', 'Task completed successfully')
@@ -402,7 +403,7 @@ Action Required: Please review and respond to this feedback.
             }
 
     @staticmethod
-    def _wechat_format_test(lang: str = 'en') -> Dict[str, Any]:
+    def _wechat_format_test(lang: str = 'en') -> dict[str, Any]:
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         if lang == 'cn':
             return {
@@ -426,7 +427,7 @@ Action Required: Please review and respond to this feedback.
             }
 
     @staticmethod
-    def task_complete(task: Dict[str, Any]) -> Dict[str, str]:
+    def task_complete(task: dict[str, Any]) -> dict[str, str]:
         """Generate task completion notification content"""
         task_name = task.get('tool_name', 'Unknown Task')
         task_id = task.get('task_id', 'N/A')
@@ -534,7 +535,7 @@ View full results in your dashboard.
         }
 
     @staticmethod
-    def daily_summary(stats: Dict[str, Any]) -> Dict[str, str]:
+    def daily_summary(stats: dict[str, Any]) -> dict[str, str]:
         """Generate daily summary notification content"""
         date = stats.get('date', datetime.now().strftime('%Y-%m-%d'))
         low_stock_count = stats.get('low_stock_count', 0)
@@ -665,7 +666,7 @@ View full results in your dashboard.
         }
 
     @staticmethod
-    def test_notification(lang: str = 'en') -> Dict[str, str]:
+    def test_notification(lang: str = 'en') -> dict[str, str]:
         """Generate test notification content"""
         if lang == 'cn':
             subject = "✅ 测试通知 - 跨境卖家AI助手"
@@ -781,8 +782,8 @@ class NotificationService:
             return
         self._initialized = True
 
-        self._queue: List[Notification] = []
-        self._history: List[Notification] = []
+        self._queue: list[Notification] = []
+        self._history: list[Notification] = []
         self._preferences = NotificationPreference()
         self._queue_lock = threading.Lock()
         self._history_lock = threading.Lock()
@@ -815,7 +816,7 @@ class NotificationService:
         env_vars = {}
 
         if os.path.exists(env_file):
-            with open(env_file, 'r') as f:
+            with open(env_file) as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith('#') and '=' in line:
@@ -871,7 +872,7 @@ class NotificationService:
             if len(self._history) > 100:
                 self._history = self._history[:100]
 
-    def get_queue(self) -> List[Dict[str, Any]]:
+    def get_queue(self) -> list[dict[str, Any]]:
         """Get pending notifications from queue"""
         with self._queue_lock:
             return [
@@ -887,7 +888,7 @@ class NotificationService:
                 for n in self._queue
             ]
 
-    def get_history(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def get_history(self, limit: int = 50) -> list[dict[str, Any]]:
         """Get notification history"""
         with self._history_lock:
             return [
@@ -936,10 +937,10 @@ class NotificationService:
 
             return True
         except Exception as e:
-            print(f"Email send error: {str(e)}")
+            print(f"Email send error: {e!s}")
             return False
 
-    def send_slack(self, webhook_url: str, message: Dict[str, Any]) -> bool:
+    def send_slack(self, webhook_url: str, message: dict[str, Any]) -> bool:
         """Send Slack notification via webhook"""
         if not webhook_url:
             webhook_url = self._preferences.slack_webhook_url
@@ -951,10 +952,10 @@ class NotificationService:
             response = requests.post(webhook_url, json=message, timeout=10)
             return response.status_code == 200
         except Exception as e:
-            print(f"Slack send error: {str(e)}")
+            print(f"Slack send error: {e!s}")
             return False
 
-    def send_wechat_notification(self, webhook_url: str, message: Dict[str, Any]) -> bool:
+    def send_wechat_notification(self, webhook_url: str, message: dict[str, Any]) -> bool:
         """Send WeChat Work notification via webhook"""
         if not webhook_url:
             webhook_url = self._preferences.wechat_webhook_url
@@ -970,10 +971,10 @@ class NotificationService:
                 print(f"WeChat send error: HTTP {response.status_code} - {response.text}")
                 return False
         except Exception as e:
-            print(f"WeChat send error: {str(e)}")
+            print(f"WeChat send error: {e!s}")
             return False
 
-    def send_dingtalk_notification(self, webhook_url: str, message: Dict[str, Any]) -> bool:
+    def send_dingtalk_notification(self, webhook_url: str, message: dict[str, Any]) -> bool:
         """Send DingTalk notification via webhook"""
         if not webhook_url:
             webhook_url = self._preferences.dingtalk_webhook_url
@@ -990,10 +991,10 @@ class NotificationService:
                 print(f"DingTalk send error: HTTP {response.status_code} - {response.text}")
                 return False
         except Exception as e:
-            print(f"DingTalk send error: {str(e)}")
+            print(f"DingTalk send error: {e!s}")
             return False
 
-    def notify_low_stock(self, alert: Dict[str, Any], lang: str = 'en') -> str:
+    def notify_low_stock(self, alert: dict[str, Any], lang: str = 'en') -> str:
         """Send low stock alert notification"""
         if not self._preferences.notify_low_stock:
             return "Low stock notifications disabled"
@@ -1045,7 +1046,7 @@ class NotificationService:
 
         return notification_id
 
-    def notify_review_alert(self, review: Dict[str, Any], lang: str = 'en') -> str:
+    def notify_review_alert(self, review: dict[str, Any], lang: str = 'en') -> str:
         """Send review alert notification"""
         if not self._preferences.notify_reviews:
             return "Review notifications disabled"
@@ -1097,7 +1098,7 @@ class NotificationService:
 
         return notification_id
 
-    def notify_task_complete(self, task: Dict[str, Any], lang: str = 'en') -> str:
+    def notify_task_complete(self, task: dict[str, Any], lang: str = 'en') -> str:
         """Send task completion notification"""
         if not self._preferences.notify_tasks:
             return "Task notifications disabled"
@@ -1149,7 +1150,7 @@ class NotificationService:
 
         return notification_id
 
-    def send_daily_summary(self, stats: Dict[str, Any], lang: str = 'en') -> str:
+    def send_daily_summary(self, stats: dict[str, Any], lang: str = 'en') -> str:
         """Send daily summary notification"""
         notification_id = self._generate_id()
         template = NotificationTemplates.daily_summary(stats)
@@ -1189,7 +1190,7 @@ class NotificationService:
 
         return notification_id
 
-    def send_test_notification(self, lang: str = 'en') -> Dict[str, Any]:
+    def send_test_notification(self, lang: str = 'en') -> dict[str, Any]:
         """Send a test notification"""
         template = NotificationTemplates.test_notification(lang)
 

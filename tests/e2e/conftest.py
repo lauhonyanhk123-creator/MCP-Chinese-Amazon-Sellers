@@ -1,7 +1,7 @@
-import pytest
 import os
-from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page
 
+import pytest
+from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:5000")
 

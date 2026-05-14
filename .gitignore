@@ -1,5 +1,59 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Environment
 .env
-.DS_Store
+.env.local
+.env.*.local
+
+# Database
 *.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+test-results/
+
+# Playwright
+playwright-report/
+playwright.config.js
+
+# Ruff
+.ruff_cache/
+.mypy_cache/
+
+# Docker
+.dockerignore

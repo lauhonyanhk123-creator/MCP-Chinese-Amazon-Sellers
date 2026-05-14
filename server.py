@@ -23,33 +23,28 @@ Tools:
 
 import json
 import os
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Optional, Callable
 from functools import wraps
+from typing import Any
 
 import httpx
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 load_dotenv()
 
 from mcp.server.fastmcp import FastMCP
 
 from database import (
-    save_product_profile,
-    get_product_profile,
     get_all_product_profiles,
-    delete_product_profile,
+    get_product_profile,
     get_stale_product_profiles,
     is_data_fresh,
+    save_product_profile,
 )
-
-from license_manager import (
-    LicenseManager,
-    get_license_manager,
-    LicenseTier
-)
+from license_manager import get_license_manager
 
 mcp = FastMCP("crossborder_seller_mcp")
 
@@ -84,18 +79,18 @@ class ResponseFormat(str, Enum):
 
 class SaveProductProfileInput(BaseModel):
     sku: str = Field(..., description="SKU identifier")
-    product_name: Optional[str] = Field(None, description="Product name")
-    cost_cny: Optional[float] = Field(None, description="Product cost in CNY")
-    shipping_to_amazon_usd: Optional[float] = Field(None, description="Shipping cost to Amazon in USD")
-    amazon_referral_fee_percent: Optional[float] = Field(None, description="Amazon referral fee percentage")
-    fba_fee_usd: Optional[float] = Field(None, description="FBA fulfillment fee in USD")
-    monthly_storage_fee_usd: Optional[float] = Field(None, description="Monthly storage fee in USD")
-    advertising_acos_percent: Optional[float] = Field(None, description="Advertising ACoS percentage")
-    payment_processing_fee_percent: Optional[float] = Field(None, description="Payment processing fee percentage")
-    return_rate_percent: Optional[float] = Field(None, description="Return rate percentage")
-    customs_duty_percent: Optional[float] = Field(None, description="Customs duty percentage")
-    overhead_percent: Optional[float] = Field(None, description="Overhead percentage")
-    notes: Optional[str] = Field(None, description="Additional notes")
+    product_name: str | None = Field(None, description="Product name")
+    cost_cny: float | None = Field(None, description="Product cost in CNY")
+    shipping_to_amazon_usd: float | None = Field(None, description="Shipping cost to Amazon in USD")
+    amazon_referral_fee_percent: float | None = Field(None, description="Amazon referral fee percentage")
+    fba_fee_usd: float | None = Field(None, description="FBA fulfillment fee in USD")
+    monthly_storage_fee_usd: float | None = Field(None, description="Monthly storage fee in USD")
+    advertising_acos_percent: float | None = Field(None, description="Advertising ACoS percentage")
+    payment_processing_fee_percent: float | None = Field(None, description="Payment processing fee percentage")
+    return_rate_percent: float | None = Field(None, description="Return rate percentage")
+    customs_duty_percent: float | None = Field(None, description="Customs duty percentage")
+    overhead_percent: float | None = Field(None, description="Overhead percentage")
+    notes: str | None = Field(None, description="Additional notes")
     response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN, description="Output format")
 
 
@@ -129,7 +124,7 @@ class GetOrdersAmazonInput(BaseModel):
         ge=1,
         le=90,
     )
-    status: Optional[str] = Field(
+    status: str | None = Field(
         default=None,
         description="Filter by order status (e.g., 'Pending', 'Shipped', 'Delivered')",
     )
@@ -187,13 +182,13 @@ class UpdateFulfillmentAmazonInput(BaseModel):
 
 
 class GetLowStockAlertsInput(BaseModel):
-    threshold: Optional[int] = Field(
+    threshold: int | None = Field(
         default=None,
         description="Custom stock threshold (default from .env or 10)",
         ge=1,
         le=10000,
     )
-    platform: Optional[str] = Field(
+    platform: str | None = Field(
         default=None,
         description="Filter by platform: '1688', 'Amazon', or 'both' (default: both)",
     )
@@ -223,7 +218,7 @@ class CalculateAmazonPriceInput(BaseModel):
         min_length=1,
         max_length=100,
     )
-    cost_cny: Optional[float] = Field(
+    cost_cny: float | None = Field(
         default=None,
         description="Product cost in CNY (if not provided, fetches from 1688)",
         ge=0,
@@ -319,13 +314,13 @@ class GetProductReviewsInput(BaseModel):
         ge=1,
         le=90,
     )
-    min_rating: Optional[int] = Field(
+    min_rating: int | None = Field(
         default=None,
         description="Filter by minimum rating (1-5)",
         ge=1,
         le=5,
     )
-    max_rating: Optional[int] = Field(
+    max_rating: int | None = Field(
         default=None,
         description="Filter by maximum rating (1-5)",
         ge=1,
@@ -344,7 +339,7 @@ class GetProductReviewsInput(BaseModel):
 
 
 class GetNegativeReviewsInput(BaseModel):
-    sku: Optional[str] = Field(
+    sku: str | None = Field(
         default=None,
         description="SKU to filter (optional, omit for all products)",
         max_length=100,
@@ -394,7 +389,7 @@ class CalculateTrueProfitInput(BaseModel):
         description="Current selling price on Amazon in USD",
         gt=0,
     )
-    cost_cny: Optional[float] = Field(
+    cost_cny: float | None = Field(
         default=None,
         description="Product cost from 1688 in CNY (will fetch if not provided)",
         ge=0,
@@ -404,7 +399,7 @@ class CalculateTrueProfitInput(BaseModel):
         description="Shipping cost from supplier to Amazon warehouse in USD",
         ge=0,
     )
-    amazon_referral_fee_percent: Optional[float] = Field(
+    amazon_referral_fee_percent: float | None = Field(
         default=None,
         description="Amazon referral fee percentage (default from config)",
         ge=0,
@@ -493,7 +488,7 @@ def _handle_api_error(e: Exception, platform: str) -> str:
         return f"Error: {platform} request timed out. Please check your network connection and try again."
     elif isinstance(e, httpx.ConnectError):
         return f"Error: Could not connect to {platform}. Please verify the API endpoint configuration."
-    return f"Error: Unexpected error with {platform}: {type(e).__name__} - {str(e)}"
+    return f"Error: Unexpected error with {platform}: {type(e).__name__} - {e!s}"
 
 
 async def _fetch_1688_inventory(sku: str) -> dict:
@@ -550,7 +545,7 @@ async def _fetch_amazon_listing(sku: str) -> dict:
         return response.json()
 
 
-async def _fetch_amazon_orders(days: int, status: Optional[str] = None, limit: int = 50) -> dict:
+async def _fetch_amazon_orders(days: int, status: str | None = None, limit: int = 50) -> dict:
     """Fetch orders from Amazon Seller Central API."""
     headers = _get_amazon_headers()
     created_after = (datetime.now() - timedelta(days=days)).isoformat()
@@ -706,7 +701,7 @@ def _get_rating_severity(rating: int) -> str:
     return "positive"
 
 
-def _parse_review_date(date_str: str) -> Optional[datetime]:
+def _parse_review_date(date_str: str) -> datetime | None:
     """Parse review date string to datetime, handling various formats."""
     if not date_str:
         return None
@@ -767,20 +762,20 @@ def _calculate_true_profit(
     overhead_percent: float,
 ) -> dict:
     """Calculate true profit including ALL cost factors for cross-border sales."""
-    
+
     # Convert product cost to USD
     cost_usd = cost_cny / exchange_rate
-    
+
     # Calculate all cost components
     amazon_referral_fee = selling_price_usd * (amazon_referral_fee_percent / 100)
     advertising_cost = selling_price_usd * (advertising_acos_percent / 100)
     payment_processing_fee = selling_price_usd * (payment_processing_fee_percent / 100)
     customs_duty = cost_usd * (customs_duty_percent / 100)
     overhead = selling_price_usd * (overhead_percent / 100)
-    
+
     # Return-related costs (assume we lose product cost and shipping on returns)
     return_cost = (cost_usd + shipping_to_amazon_usd) * (return_rate_percent / 100)
-    
+
     # Total costs
     total_cost = (
         cost_usd +
@@ -794,22 +789,22 @@ def _calculate_true_profit(
         customs_duty +
         overhead
     )
-    
+
     # Profit calculations
     gross_profit = selling_price_usd - (cost_usd + shipping_to_amazon_usd)
     net_profit = selling_price_usd - total_cost
     profit_margin = (net_profit / selling_price_usd * 100) if selling_price_usd > 0 else 0
     break_even_price = total_cost
-    
+
     # ROI calculations
     roi = (net_profit / cost_usd * 100) if cost_usd > 0 else 0
-    
+
     return {
         "selling_price_usd": selling_price_usd,
         "cost_cny": cost_cny,
         "cost_usd": round(cost_usd, 2),
         "exchange_rate": exchange_rate,
-        
+
         # Cost breakdown
         "cost_breakdown": {
             "product_cost_usd": round(cost_usd, 2),
@@ -823,17 +818,17 @@ def _calculate_true_profit(
             "customs_duty_usd": round(customs_duty, 2),
             "overhead_usd": round(overhead, 2),
         },
-        
+
         # Total costs
         "total_cost_usd": round(total_cost, 2),
-        
+
         # Profit metrics
         "gross_profit_usd": round(gross_profit, 2),
         "net_profit_usd": round(net_profit, 2),
         "profit_margin_percent": round(profit_margin, 2),
         "break_even_price_usd": round(break_even_price, 2),
         "roi_percent": round(roi, 2),
-        
+
         # Recommendations
         "is_profitable": net_profit > 0,
         "recommended_price_adjustment": round(break_even_price * 1.2 - selling_price_usd, 2) if net_profit <= 0 else 0,
@@ -920,16 +915,16 @@ async def save_product_profile_tool(params: SaveProductProfileInput) -> str:
             value = getattr(params, field)
             if value is not None:
                 save_data[field] = value
-        
+
         save_product_profile(params.sku, **save_data)
-        
+
         result = {
             "sku": params.sku,
             "saved": True,
             "saved_at": datetime.now().isoformat(),
             "fields_saved": list(save_data.keys())
         }
-        
+
         if params.response_format == ResponseFormat.JSON:
             return json.dumps(result, indent=2, ensure_ascii=False)
         else:
@@ -943,7 +938,7 @@ async def save_product_profile_tool(params: SaveProductProfileInput) -> str:
             for field in result["fields_saved"]:
                 lines.append(f"- {field}")
             return "\n".join(lines)
-            
+
     except Exception as e:
         return _handle_api_error(e, "Save Product Profile")
 
@@ -966,15 +961,15 @@ async def get_product_profile_tool(params: GetProductProfileInput) -> str:
     """
     try:
         profile = get_product_profile(params.sku)
-        
+
         if not profile:
             if params.response_format == ResponseFormat.JSON:
                 return json.dumps({"sku": params.sku, "found": False}, indent=2, ensure_ascii=False)
             else:
                 return f"# ❌ Product Profile Not Found\n\nNo saved data for SKU: {params.sku}"
-        
+
         is_fresh, age = is_data_fresh(params.sku)
-        
+
         if params.response_format == ResponseFormat.JSON:
             return json.dumps({
                 "sku": params.sku,
@@ -985,23 +980,23 @@ async def get_product_profile_tool(params: GetProductProfileInput) -> str:
             }, indent=2, ensure_ascii=False)
         else:
             freshness_warning = "" if is_fresh else f"\n\n⚠️  **Data is stale!** Last updated {age.total_seconds()/3600:.1f} hours ago."
-            
+
             lines = [
                 f"# 📦 Product Profile: {params.sku}",
                 "",
             ]
-            
+
             if profile["product_name"]:
                 lines.append(f"**Product**: {profile['product_name']}")
-            
+
             if profile["cost_cny"]:
                 lines.append(f"**Cost**: ¥{profile['cost_cny']:.2f}")
-            
+
             lines.extend([
                 "",
                 "## Cost Details",
             ])
-            
+
             cost_fields = [
                 ("shipping_to_amazon_usd", "Shipping to Amazon", "$"),
                 ("fba_fee_usd", "FBA Fee", "$"),
@@ -1013,27 +1008,27 @@ async def get_product_profile_tool(params: GetProductProfileInput) -> str:
                 ("customs_duty_percent", "Customs Duty", "%"),
                 ("overhead_percent", "Overhead", "%"),
             ]
-            
+
             for field, label, symbol in cost_fields:
                 value = profile[field]
                 if value:
                     lines.append(f"- **{label}**: {symbol}{value:.2f}")
-            
+
             if profile["notes"]:
                 lines.extend([
                     "",
                     "## Notes",
                     profile["notes"],
                 ])
-            
+
             lines.extend([
                 "",
                 f"**Last updated**: {profile['last_updated']}",
                 freshness_warning
             ])
-            
+
             return "\n".join(lines)
-            
+
     except Exception as e:
         return _handle_api_error(e, "Get Product Profile")
 
@@ -1053,13 +1048,13 @@ async def list_all_products(params: GetStaleProductsInput) -> str:
     """List all saved product profiles. Shows freshness status."""
     try:
         all_profiles = get_all_product_profiles()
-        
+
         if not all_profiles:
             if params.response_format == ResponseFormat.JSON:
                 return json.dumps({"products": [], "count": 0}, indent=2, ensure_ascii=False)
             else:
                 return "# 📦 No Products Saved\n\nYou haven't saved any product profiles yet."
-        
+
         if params.response_format == ResponseFormat.JSON:
             result = {
                 "products": all_profiles,
@@ -1070,26 +1065,26 @@ async def list_all_products(params: GetStaleProductsInput) -> str:
         else:
             stale_products = get_stale_product_profiles(params.hours)
             stale_skus = {p["sku"] for p in stale_products}
-            
+
             lines = [
                 f"# 📦 Product Profiles ({len(all_profiles)} total)",
                 "",
             ]
-            
+
             for profile in all_profiles:
                 sku = profile["sku"]
                 is_stale = sku in stale_skus
                 status_icon = "🔴" if is_stale else "🟢"
-                
+
                 lines.append(f"## {status_icon} {sku}")
-                
+
                 if profile["product_name"]:
                     lines.append(f"**Product**: {profile['product_name']}")
                 if profile["cost_cny"]:
                     lines.append(f"**Cost**: ¥{profile['cost_cny']:.2f}")
                 lines.append(f"**Last updated**: {profile['last_updated']}")
                 lines.append("")
-            
+
             if stale_products:
                 lines.extend([
                     "---",
@@ -1098,9 +1093,9 @@ async def list_all_products(params: GetStaleProductsInput) -> str:
                 ])
                 for p in stale_products:
                     lines.append(f"- {p['sku']}")
-            
+
             return "\n".join(lines)
-            
+
     except Exception as e:
         return _handle_api_error(e, "List Products")
 
@@ -1120,7 +1115,7 @@ async def get_stale_products_tool(params: GetStaleProductsInput) -> str:
     """Find products with data that needs updating."""
     try:
         stale = get_stale_product_profiles(params.hours)
-        
+
         if params.response_format == ResponseFormat.JSON:
             return json.dumps({
                 "stale_products": stale,
@@ -1130,21 +1125,21 @@ async def get_stale_products_tool(params: GetStaleProductsInput) -> str:
         else:
             if not stale:
                 return f"# ✅ All Products Fresh\n\nNo products need updating (threshold: {params.hours} hours)."
-            
+
             lines = [
                 f"# ⚠️ Stale Products ({len(stale)} found)",
                 "",
                 f"These products haven't been updated in more than {params.hours} hours:",
                 "",
             ]
-            
+
             for product in stale:
                 lines.append(f"## 🔴 {product['sku']}")
                 lines.append(f"**Last updated**: {product['last_updated']}")
                 if product["product_name"]:
                     lines.append(f"**Product**: {product['product_name']}")
                 lines.append("")
-            
+
             lines.extend([
                 "---",
                 "## Recommendation",
@@ -1153,9 +1148,9 @@ async def get_stale_products_tool(params: GetStaleProductsInput) -> str:
                 "- Review and update shipping/FBA fees",
                 "- Check current ACoS and return rates",
             ])
-            
+
             return "\n".join(lines)
-            
+
     except Exception as e:
         return _handle_api_error(e, "Get Stale Products")
 
@@ -1400,9 +1395,7 @@ async def sync_inventory(params: SyncInventoryInput) -> str:
 
         if amazon_status == "not_listed":
             mismatch_type = "not_listed"
-            recommendation = "Create Amazon listing for this product. Stock: {stock}".format(
-                stock=source_1688_stock
-            )
+            recommendation = f"Create Amazon listing for this product. Stock: {source_1688_stock}"
         elif amazon_status == "unavailable":
             mismatch_type = "sync_error"
             recommendation = "Unable to fetch Amazon stock. Manual check required."
@@ -1440,15 +1433,15 @@ async def sync_inventory(params: SyncInventoryInput) -> str:
                 f"# Inventory Sync Report: {params.sku} [{alert_indicator}]",
                 "",
                 "## Stock Comparison",
-                f"| Platform | Stock Level |",
-                f"|----------|-------------|",
+                "| Platform | Stock Level |",
+                "|----------|-------------|",
                 f"| 1688     | {sync_result['source_stock']}         |",
                 f"| Amazon   | {sync_result['target_stock']}         |",
                 "",
                 f"**Discrepancy**: {sync_result['discrepancy']} units ({sync_result['discrepancy_percent']}%)",
                 f"**Mismatch Type**: {sync_result['mismatch_type']}",
                 "",
-                f"## Recommendation",
+                "## Recommendation",
                 f"{sync_result['recommendation']}",
                 "",
                 f"_Last checked: {sync_result['last_checked']}_",
@@ -1653,7 +1646,7 @@ async def get_low_stock_alerts(params: GetLowStockAlertsInput) -> str:
                             "asin": item.get("asin", "N/A"),
                         })
         except Exception as e:
-            error_msg = f"Warning: Could not fetch {platform} inventory - {str(e)}"
+            error_msg = f"Warning: Could not fetch {platform} inventory - {e!s}"
             alerts.append({
                 "error": error_msg,
                 "platform": platform,
@@ -1868,8 +1861,8 @@ async def calculate_amazon_price(params: CalculateAmazonPriceInput) -> str:
                 f"**Product Name**: {product_name}",
                 "",
                 "## Cost Breakdown",
-                f"| Item | Amount |",
-                f"|------|--------|",
+                "| Item | Amount |",
+                "|------|--------|",
                 f"| 1688 Cost | ¥{calculation['cost_cny']} (${calculation['cost_usd']}) |",
                 f"| Shipping | ${calculation['shipping_cost_usd']} |",
                 f"| Subtotal | ${calculation['subtotal_usd']} |",
@@ -1877,8 +1870,8 @@ async def calculate_amazon_price(params: CalculateAmazonPriceInput) -> str:
                 f"| **Total Cost** | **${calculation['total_cost_usd']}** |",
                 "",
                 "## Pricing Strategy",
-                f"| Tier | Price |",
-                f"|------|-------|",
+                "| Tier | Price |",
+                "|------|-------|",
                 f"| Budget (-10%) | ${result['price_tiers']['budget']} |",
                 f"| Standard | ${result['price_tiers']['standard']} |",
                 f"| Premium (+15%) | ${result['price_tiers']['premium']} |",
@@ -2030,15 +2023,15 @@ async def sync_price(params: SyncPriceInput) -> str:
                 f"**Product**: {product_name}",
                 "",
                 "## Pricing Comparison",
-                f"| Source | Price (USD) |",
-                f"|---------|-------------|",
+                "| Source | Price (USD) |",
+                "|---------|-------------|",
                 f"| 1688 Cost | ${calculation['cost_usd']} |",
                 f"| Current Amazon | ${current_price if current_price > 0 else 'N/A'} |",
                 f"| **Recommended** | **${calculation['recommended_price_usd']}** |",
                 "",
                 f"**Action**: {icon} {sync_result['action']}",
                 "",
-                f"## Recommendation",
+                "## Recommendation",
                 f"{sync_result['recommendation']}",
                 "",
                 "## Profit Analysis",
@@ -2266,7 +2259,7 @@ async def get_competitor_prices(params: GetCompetitorPricesInput) -> str:
                 if comp['price']:
                     lines.append(f"- **Price**: ${comp['price']}")
                 else:
-                    lines.append(f"- **Price**: N/A")
+                    lines.append("- **Price**: N/A")
                 if comp['rating']:
                     lines.append(f"- **Rating**: {comp['rating']}/5 ({comp['review_count']} reviews)")
                 lines.append("")
@@ -2744,16 +2737,16 @@ async def calculate_true_profit(params: CalculateTrueProfitInput) -> str:
         # Get product cost if not provided
         cost_cny = params.cost_cny
         product_name = params.sku
-        
+
         if cost_cny is None:
             product_data = await _fetch_1688_product_details(params.sku)
             cost_cny = product_data.get("price", 0)
             product_name = product_data.get("productName", params.sku)
-        
+
         # Get exchange rate and referral fee
         exchange_rate = _get_currency_rate()
         referral_fee = params.amazon_referral_fee_percent or _get_amazon_fees()
-        
+
         # Calculate true profit
         calculation = _calculate_true_profit(
             selling_price_usd=params.selling_price_usd,
@@ -2769,20 +2762,20 @@ async def calculate_true_profit(params: CalculateTrueProfitInput) -> str:
             customs_duty_percent=params.customs_duty_percent,
             overhead_percent=params.overhead_percent,
         )
-        
+
         result = {
             "sku": params.sku,
             "product_name": product_name,
             "calculated_at": datetime.now().isoformat(),
             **calculation
         }
-        
+
         if params.response_format == ResponseFormat.JSON:
             return json.dumps(result, indent=2, ensure_ascii=False)
         else:
             # Determine status icon
             status_icon = "🟢 PROFITABLE" if result["is_profitable"] else "🔴 NOT PROFITABLE"
-            
+
             lines = [
                 f"# True Profit Analysis: {params.sku} [{status_icon}]",
                 "",
@@ -2797,22 +2790,22 @@ async def calculate_true_profit(params: CalculateTrueProfitInput) -> str:
                 f"- **Break-Even Price**: ${result['break_even_price_usd']:.2f}",
                 "",
                 "## Detailed Cost Breakdown",
-                f"| Cost Category | Amount (USD) | Percentage of Price |",
-                f"|---------------|--------------|---------------------|",
+                "| Cost Category | Amount (USD) | Percentage of Price |",
+                "|---------------|--------------|---------------------|",
             ]
-            
+
             cost_breakdown = result["cost_breakdown"]
             for category, amount in cost_breakdown.items():
                 percentage = (amount / result["selling_price_usd"] * 100) if result["selling_price_usd"] > 0 else 0
                 category_name = category.replace("_usd", "").replace("_", " ").title()
                 lines.append(f"| {category_name} | ${amount:.2f} | {percentage:.1f}% |")
-            
+
             lines.extend([
                 "",
                 f"**Total Cost**: ${result['total_cost_usd']:.2f}",
                 "",
             ])
-            
+
             if not result["is_profitable"]:
                 lines.extend([
                     "## ⚠️ Recommendations",
@@ -2830,11 +2823,11 @@ async def calculate_true_profit(params: CalculateTrueProfitInput) -> str:
                     "- Consider scaling advertising if ROI remains strong",
                     "",
                 ])
-            
+
             lines.append(f"_Calculated at: {result['calculated_at']}_")
-            
+
             return "\n".join(lines)
-    
+
     except Exception as e:
         return _handle_api_error(e, "True Profit Calculator")
 
@@ -2862,7 +2855,7 @@ async def get_license_info() -> str:
     tier_name = license_manager.get_tier_name(license.tier)
 
     # 功能列表
-    from license_manager import get_features_for_tier, TIER_FEATURES
+    from license_manager import TIER_FEATURES, get_features_for_tier
     all_tiers = list(TIER_FEATURES.keys())
     tier_features = {
         license_manager.get_tier_name(t): get_features_for_tier(t)
@@ -2870,7 +2863,7 @@ async def get_license_info() -> str:
     }
 
     lines = [
-        f"# 许可证信息 / License Information",
+        "# 许可证信息 / License Information",
         "",
         f"## 当前等级: {tier_name}",
         "",

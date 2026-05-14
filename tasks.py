@@ -3,12 +3,13 @@ Celery Tasks for Cross-Border Seller Operations
 Background tasks that wrap MCP tools for scheduled execution
 """
 import asyncio
-import logging
 import json
-from datetime import datetime
-from typing import Optional, Dict, Any, List
-from celery_app import celery_app
+import logging
 import traceback
+from datetime import datetime
+from typing import Any
+
+from celery_app import celery_app
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -64,7 +65,7 @@ def save_task_result(task_name: str, task_id: str, status: str, result: Any = No
 
 
 @celery_app.task(bind=True, name='tasks.sync_inventory_task', max_retries=3, default_retry_delay=60)
-def sync_inventory_task(self, sku: Optional[str] = None) -> Dict[str, Any]:
+def sync_inventory_task(self, sku: str | None = None) -> dict[str, Any]:
     """
     Sync inventory from 1688 to Amazon
     Compares stock levels and flags mismatches
@@ -73,7 +74,7 @@ def sync_inventory_task(self, sku: Optional[str] = None) -> Dict[str, Any]:
     logger.info(f"[{task_id}] Starting inventory sync task")
 
     try:
-        from server import SyncInventoryInput, sync_inventory, ResponseFormat
+        from server import ResponseFormat, SyncInventoryInput, sync_inventory
 
         if sku:
             input_params = SyncInventoryInput(
@@ -82,7 +83,7 @@ def sync_inventory_task(self, sku: Optional[str] = None) -> Dict[str, Any]:
             )
             result = run_async_coro(sync_inventory(input_params))
         else:
-            from server import list_all_products, GetStaleProductsInput, ResponseFormat
+            from server import GetStaleProductsInput, ResponseFormat, list_all_products
             products_result = run_async_coro(list_all_products(GetStaleProductsInput(hours=24, response_format=ResponseFormat.JSON)))
             products_data = json.loads(products_result)
             skus = [p.get('sku') for p in products_data.get('products', [])[:10]]
@@ -104,7 +105,7 @@ def sync_inventory_task(self, sku: Optional[str] = None) -> Dict[str, Any]:
         return {'success': True, 'task_id': task_id, 'result': result}
 
     except Exception as e:
-        error_msg = f"Inventory sync failed: {str(e)}"
+        error_msg = f"Inventory sync failed: {e!s}"
         logger.error(f"[{task_id}] {error_msg}")
         logger.error(traceback.format_exc())
         save_task_result('sync_inventory_task', task_id, 'failed', error=error_msg)
@@ -115,7 +116,7 @@ def sync_inventory_task(self, sku: Optional[str] = None) -> Dict[str, Any]:
 
 
 @celery_app.task(bind=True, name='tasks.check_low_stock_task', max_retries=3, default_retry_delay=60)
-def check_low_stock_task(self, threshold: int = 10, platform: str = 'both') -> Dict[str, Any]:
+def check_low_stock_task(self, threshold: int = 10, platform: str = 'both') -> dict[str, Any]:
     """
     Check for low stock alerts
     Returns all SKUs where stock is below threshold
@@ -124,7 +125,7 @@ def check_low_stock_task(self, threshold: int = 10, platform: str = 'both') -> D
     logger.info(f"[{task_id}] Starting low stock check (threshold: {threshold}, platform: {platform})")
 
     try:
-        from server import GetLowStockAlertsInput, get_low_stock_alerts, ResponseFormat
+        from server import GetLowStockAlertsInput, ResponseFormat, get_low_stock_alerts
 
         input_params = GetLowStockAlertsInput(
             threshold=threshold,
@@ -138,7 +139,7 @@ def check_low_stock_task(self, threshold: int = 10, platform: str = 'both') -> D
         return {'success': True, 'task_id': task_id, 'result': result}
 
     except Exception as e:
-        error_msg = f"Low stock check failed: {str(e)}"
+        error_msg = f"Low stock check failed: {e!s}"
         logger.error(f"[{task_id}] {error_msg}")
         logger.error(traceback.format_exc())
         save_task_result('check_low_stock_task', task_id, 'failed', error=error_msg)
@@ -149,7 +150,7 @@ def check_low_stock_task(self, threshold: int = 10, platform: str = 'both') -> D
 
 
 @celery_app.task(bind=True, name='tasks.sync_prices_task', max_retries=3, default_retry_delay=60)
-def sync_prices_task(self, sku: Optional[str] = None, target_margin: float = 25.0) -> Dict[str, Any]:
+def sync_prices_task(self, sku: str | None = None, target_margin: float = 25.0) -> dict[str, Any]:
     """
     Sync prices between 1688 and Amazon
     Compares cost-based pricing against current Amazon prices
@@ -158,7 +159,7 @@ def sync_prices_task(self, sku: Optional[str] = None, target_margin: float = 25.
     logger.info(f"[{task_id}] Starting price sync task (sku: {sku}, margin: {target_margin}%)")
 
     try:
-        from server import SyncPriceInput, sync_price, ResponseFormat
+        from server import ResponseFormat, SyncPriceInput, sync_price
 
         if sku:
             input_params = SyncPriceInput(
@@ -169,7 +170,7 @@ def sync_prices_task(self, sku: Optional[str] = None, target_margin: float = 25.
             )
             result = run_async_coro(sync_price(input_params))
         else:
-            from server import list_all_products, GetStaleProductsInput, ResponseFormat
+            from server import GetStaleProductsInput, ResponseFormat, list_all_products
             products_result = run_async_coro(list_all_products(GetStaleProductsInput(hours=24, response_format=ResponseFormat.JSON)))
             products_data = json.loads(products_result)
             skus = [p.get('sku') for p in products_data.get('products', [])[:10]]
@@ -193,7 +194,7 @@ def sync_prices_task(self, sku: Optional[str] = None, target_margin: float = 25.
         return {'success': True, 'task_id': task_id, 'result': result}
 
     except Exception as e:
-        error_msg = f"Price sync failed: {str(e)}"
+        error_msg = f"Price sync failed: {e!s}"
         logger.error(f"[{task_id}] {error_msg}")
         logger.error(traceback.format_exc())
         save_task_result('sync_prices_task', task_id, 'failed', error=error_msg)
@@ -204,7 +205,7 @@ def sync_prices_task(self, sku: Optional[str] = None, target_margin: float = 25.
 
 
 @celery_app.task(bind=True, name='tasks.fetch_reviews_task', max_retries=3, default_retry_delay=60)
-def fetch_reviews_task(self, days: int = 7, include_supplier_flags: bool = True) -> Dict[str, Any]:
+def fetch_reviews_task(self, days: int = 7, include_supplier_flags: bool = True) -> dict[str, Any]:
     """
     Fetch latest product reviews from Amazon
     Returns reviews that need attention
@@ -213,7 +214,7 @@ def fetch_reviews_task(self, days: int = 7, include_supplier_flags: bool = True)
     logger.info(f"[{task_id}] Starting reviews fetch (days: {days})")
 
     try:
-        from server import GetReviewAlertsInput, get_review_alerts, ResponseFormat
+        from server import GetReviewAlertsInput, ResponseFormat, get_review_alerts
 
         input_params = GetReviewAlertsInput(
             days=days,
@@ -227,7 +228,7 @@ def fetch_reviews_task(self, days: int = 7, include_supplier_flags: bool = True)
         return {'success': True, 'task_id': task_id, 'result': result}
 
     except Exception as e:
-        error_msg = f"Reviews fetch failed: {str(e)}"
+        error_msg = f"Reviews fetch failed: {e!s}"
         logger.error(f"[{task_id}] {error_msg}")
         logger.error(traceback.format_exc())
         save_task_result('fetch_reviews_task', task_id, 'failed', error=error_msg)
@@ -238,7 +239,7 @@ def fetch_reviews_task(self, days: int = 7, include_supplier_flags: bool = True)
 
 
 @celery_app.task(bind=True, name='tasks.generate_daily_report_task', max_retries=3, default_retry_delay=60)
-def generate_daily_report_task(self, days: int = 1) -> Dict[str, Any]:
+def generate_daily_report_task(self, days: int = 1) -> dict[str, Any]:
     """
     Generate daily summary report
     Aggregates inventory, orders, reviews, and revenue data
@@ -254,10 +255,13 @@ def generate_daily_report_task(self, days: int = 1) -> Dict[str, Any]:
         }
 
         from server import (
-            GetLowStockAlertsInput, get_low_stock_alerts,
-            GetOrdersAmazonInput, get_orders_amazon,
-            GetReviewAlertsInput, get_review_alerts,
-            ResponseFormat
+            GetLowStockAlertsInput,
+            GetOrdersAmazonInput,
+            GetReviewAlertsInput,
+            ResponseFormat,
+            get_low_stock_alerts,
+            get_orders_amazon,
+            get_review_alerts,
         )
 
         try:
@@ -304,7 +308,7 @@ def generate_daily_report_task(self, days: int = 1) -> Dict[str, Any]:
         return {'success': True, 'task_id': task_id, 'result': report_data}
 
     except Exception as e:
-        error_msg = f"Daily report generation failed: {str(e)}"
+        error_msg = f"Daily report generation failed: {e!s}"
         logger.error(f"[{task_id}] {error_msg}")
         logger.error(traceback.format_exc())
         save_task_result('generate_daily_report_task', task_id, 'failed', error=error_msg)
@@ -315,7 +319,7 @@ def generate_daily_report_task(self, days: int = 1) -> Dict[str, Any]:
 
 
 @celery_app.task(name='tasks.get_task_status')
-def get_task_status(task_id: str) -> Dict[str, Any]:
+def get_task_status(task_id: str) -> dict[str, Any]:
     """Get status of a Celery task"""
     task = celery_app.AsyncResult(task_id)
     return {
@@ -327,7 +331,7 @@ def get_task_status(task_id: str) -> Dict[str, Any]:
 
 
 @celery_app.task(name='tasks.list_scheduled_tasks')
-def list_scheduled_tasks() -> List[Dict[str, Any]]:
+def list_scheduled_tasks() -> list[dict[str, Any]]:
     """List all registered periodic tasks"""
     from celery_app import celery_app
     inspect = celery_app.control.inspect()

@@ -5,12 +5,12 @@ Provides rate limiting functionality based on user subscription tiers
 """
 
 import os
-import time
 import threading
-from datetime import datetime, timedelta
-from typing import Dict, Optional, Tuple, Any
+import time
 from functools import wraps
-from flask import request, jsonify, Response, g
+from typing import Any
+
+from flask import Response, g, jsonify, request
 
 try:
     import redis
@@ -43,7 +43,7 @@ class RateLimiter:
             return
 
         self._redis_client = None
-        self._memory_store: Dict[str, Dict[str, Any]] = {}
+        self._memory_store: dict[str, dict[str, Any]] = {}
         self._memory_lock = threading.Lock()
 
         if REDIS_AVAILABLE:
@@ -67,13 +67,13 @@ class RateLimiter:
         current_hour = int(time.time() // 3600)
         return f"ratelimit:{user_id}:{tier}:{current_hour}"
 
-    def get_tier_limits(self, tier: str) -> Dict[str, Any]:
+    def get_tier_limits(self, tier: str) -> dict[str, Any]:
         tier = tier.upper()
         if tier not in self.TIER_LIMITS:
             tier = 'FREE'
         return self.TIER_LIMITS[tier].copy()
 
-    def check_rate_limit(self, user_id: Optional[str] = None, tier: str = 'FREE') -> Tuple[bool, Dict[str, Any]]:
+    def check_rate_limit(self, user_id: str | None = None, tier: str = 'FREE') -> tuple[bool, dict[str, Any]]:
         tier = tier.upper()
         limits = self.get_tier_limits(tier)
 
@@ -117,13 +117,13 @@ class RateLimiter:
             'tier': tier
         }
 
-    def get_remaining_requests(self, user_id: Optional[str] = None, tier: str = 'FREE') -> int:
+    def get_remaining_requests(self, user_id: str | None = None, tier: str = 'FREE') -> int:
         tier = tier.upper()
         identifier = user_id or self._get_user_identifier()
         _, info = self.check_rate_limit(identifier, tier)
         return info['remaining']
 
-    def increment_counter(self, user_id: Optional[str] = None, tier: str = 'FREE') -> int:
+    def increment_counter(self, user_id: str | None = None, tier: str = 'FREE') -> int:
         tier = tier.upper()
         identifier = user_id or self._get_user_identifier()
         key = self._get_redis_key(identifier, tier)
@@ -154,7 +154,7 @@ class RateLimiter:
             self._memory_store[key] = entry
             return entry['count']
 
-    def reset_counter(self, user_id: Optional[str] = None, tier: str = 'FREE') -> bool:
+    def reset_counter(self, user_id: str | None = None, tier: str = 'FREE') -> bool:
         tier = tier.upper()
         identifier = user_id or self._get_user_identifier()
         key = self._get_redis_key(identifier, tier)
@@ -171,7 +171,7 @@ class RateLimiter:
                 del self._memory_store[key]
             return True
 
-    def get_rate_limit_info(self, user_id: Optional[str] = None, tier: str = 'FREE') -> Dict[str, Any]:
+    def get_rate_limit_info(self, user_id: str | None = None, tier: str = 'FREE') -> dict[str, Any]:
         tier = tier.upper()
         identifier = user_id or self._get_user_identifier()
         is_allowed, info = self.check_rate_limit(identifier, tier)
@@ -227,11 +227,7 @@ def rate_limit(tier: str = 'FREE'):
             else:
                 response, status_code = result, 200
 
-            if isinstance(response, Response):
-                response.headers['X-RateLimit-Limit'] = str(rate_info['limit'])
-                response.headers['X-RateLimit-Remaining'] = str(rate_info['remaining'])
-                response.headers['X-RateLimit-Reset'] = str(rate_info['reset'])
-            elif hasattr(response, 'headers'):
+            if isinstance(response, Response) or hasattr(response, 'headers'):
                 response.headers['X-RateLimit-Limit'] = str(rate_info['limit'])
                 response.headers['X-RateLimit-Remaining'] = str(rate_info['remaining'])
                 response.headers['X-RateLimit-Reset'] = str(rate_info['reset'])
@@ -250,7 +246,7 @@ def get_text(lang: str, key: str) -> str:
     return key
 
 
-def add_rate_limit_headers(response: Response, rate_info: Optional[Dict[str, Any]] = None) -> Response:
+def add_rate_limit_headers(response: Response, rate_info: dict[str, Any] | None = None) -> Response:
     if rate_info is None:
         if hasattr(g, 'rate_limit_info'):
             rate_info = g.rate_limit_info
@@ -265,7 +261,7 @@ def add_rate_limit_headers(response: Response, rate_info: Optional[Dict[str, Any
 
 def get_user_tier_from_license() -> str:
     try:
-        from license_manager import get_license_manager, LicenseTier
+        from license_manager import LicenseTier, get_license_manager
         license_mgr = get_license_manager()
         license_info = license_mgr.get_license_info()
         tier_map = {
