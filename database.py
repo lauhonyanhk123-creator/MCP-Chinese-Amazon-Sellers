@@ -227,7 +227,7 @@ def save_product_profile(sku: str, **kwargs):
         VALUES (?, {placeholders})
     '''
 
-    cursor.execute(sql, [sku] + list(kwargs.values()) + list(kwargs.values()))
+    cursor.execute(sql, [sku] + list(kwargs.values()))
     conn.commit()
     conn.close()
 

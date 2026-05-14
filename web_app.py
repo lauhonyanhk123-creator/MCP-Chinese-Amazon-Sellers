@@ -67,6 +67,23 @@ from cache import CacheManager, cached
 
 cache_manager = CacheManager()
 
+
+class AsyncRunner:
+    """Helper class to run async coroutines from sync context"""
+    _loop = None
+    _thread = None
+
+    @classmethod
+    def run_async(cls, coro):
+        """Run an async coroutine and return its result"""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
+
 _process_start_time = datetime.now()
 _request_counter = 0
 _request_counter_lock = threading.Lock()
