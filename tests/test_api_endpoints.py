@@ -157,7 +157,7 @@ class TestAPICallTool:
     def test_call_tool_missing_required_params_returns_400(self, client):
         """Test that missing required parameters returns 400"""
         response = client.post(
-            '/api/tools/get_low_stock_alerts',
+            '/api/tools/sync_inventory',
             data=json.dumps({}),
             content_type='application/json'
         )

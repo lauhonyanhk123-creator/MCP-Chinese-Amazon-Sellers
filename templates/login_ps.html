@@ -1,0 +1,88 @@
+{% extends "base_ps.html" %}
+
+{% block title %}PS C:\Seller\Login>{% endblock %}
+
+{% block content %}
+<div style="max-width: 500px; margin: 50px auto;">
+    <div class="terminal-window">
+        <div class="terminal-titlebar">
+            <div class="title">{{ '用户登录' if lang == 'cn' else 'User Login' }}</div>
+            <div class="terminal-controls">
+                <span class="terminal-btn minimize"></span>
+                <span class="terminal-btn maximize"></span>
+                <span class="terminal-btn close"></span>
+            </div>
+        </div>
+        
+        <div class="terminal-content">
+            <pre class="ascii-logo" style="font-size: 8px; text-align: center; margin-bottom: 20px; color: var(--ps-cyan);">
+ ____  _____ ____    _   _      _     ___   ____ ___  ___   ___  _     _____ 
+|  _ \| ____|  _ \  / \ | |    | |   / _ \ / ___/ _ \|   \ / _ \| |   | ____|
+| |_) |  _| | |_) |/ _ \| |    | |  | | | | |  | | | | |) | | | | |   |  _|  
+|  _ <| |___|  _ </ ___ \ |___ | |__| |_| | |__| |_| |   <| |_| | |___| |___ 
+|_| \_\_____|_| \_/_/   \_\_____|\____|\___/ \____\___/|_|\_\\___/|_____|_____|
+            </pre>
+            
+            <div class="terminal-output" style="margin-bottom: 20px;">
+                <span class="terminal-info">{{ '欢迎使用跨境卖家AI助手' if lang == 'cn' else 'Welcome to Cross-Border Seller AI' }}</span>
+            </div>
+            
+            <form method="POST" action="/login?lang={{ lang }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div class="ps-form-group">
+                    <label class="ps-label">$Email =</label>
+                    <input type="email" name="email" class="ps-input" 
+                           placeholder="{{ '输入邮箱地址' if lang == 'cn' else 'Enter email address' }}" required>
+                </div>
+                
+                <div class="ps-form-group">
+                    <label class="ps-label">$Password =</label>
+                    <input type="password" name="password" class="ps-input" 
+                           placeholder="{{ '输入密码' if lang == 'cn' else 'Enter password' }}" required>
+                </div>
+                
+                <div class="ps-form-group">
+                    <label class="ps-checkbox-container">
+                        <input type="checkbox" name="remember" class="ps-checkbox">
+                        <span style="margin-left: 8px; color: var(--ps-text-dim);">$RememberMe = $true</span>
+                    </label>
+                </div>
+                
+                <button type="submit" class="ps-btn primary" style="width: 100%; margin-top: 15px;">
+                    > {{ '执行登录' if lang == 'cn' else 'Execute Login' }}
+                </button>
+            </form>
+            
+            <hr class="ascii-hr" style="margin: 25px 0;">
+            
+            <div class="terminal-output" style="background: rgba(0,255,255,0.05);">
+                <span class="terminal-warning">{{ '演示账户' if lang == 'cn' else 'Demo Credentials' }}:</span>
+                <pre style="margin: 10px 0; color: var(--ps-text-dim);">
+┌─────────────────────────────────────┐
+│ admin@demo.com    / admin123        │
+│ manager@demo.com  / manager123      │
+│ viewer@demo.com   / viewer123       │
+└─────────────────────────────────────┘
+                </pre>
+            </div>
+            
+            <div style="margin-top: 20px; text-align: center;">
+                <a href="/register?lang={{ lang }}" class="ps-btn" style="margin: 5px;">
+                    > {{ '注册账户' if lang == 'cn' else 'Register' }}
+                </a>
+                <a href="/forgot-password?lang={{ lang }}" class="ps-btn" style="margin: 5px;">
+                    > {{ '忘记密码' if lang == 'cn' else 'Forgot Password' }}
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="terminal-output" style="margin-top: 20px; text-align: center;">
+        <span class="terminal-info" style="font-size: 12px;">
+            {{ '没有账户？' if lang == 'cn' else 'No account?' }}
+            <a href="/register?lang={{ lang }}">{{ '立即注册' if lang == 'cn' else 'Register now' }}</a>
+        </span>
+    </div>
+</div>
+{% endblock %}

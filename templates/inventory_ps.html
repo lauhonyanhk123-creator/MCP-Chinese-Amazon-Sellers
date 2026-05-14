@@ -1,0 +1,108 @@
+{% extends "base_ps.html" %}
+
+{% block title %}PS C:\Seller\Inventory>{% endblock %}
+
+{% block content %}
+<div class="terminal-header">{{ '库存管理' if lang == 'cn' else 'Inventory Management' }}</div>
+
+<div class="terminal-prompt">Get-Inventory -Threshold {{ threshold | default(10) }}<span class="cursor-blink"></span></div>
+
+<div style="display: flex; gap: 10px; margin: 20px 0; flex-wrap: wrap;">
+    <div class="ps-form-group" style="margin: 0;">
+        <label class="ps-label">$Threshold =</label>
+        <input type="number" id="threshold-input" class="ps-input" value="{{ threshold | default(10) }}" style="width: 100px;">
+    </div>
+    
+    <div class="ps-form-group" style="margin: 0;">
+        <label class="ps-label">$Platform =</label>
+        <select id="platform-select" class="ps-select">
+            <option value="">{{ '全部' if lang == 'cn' else 'All' }}</option>
+            <option value="amazon" {% if platform == 'amazon' %}selected{% endif %}>Amazon</option>
+            <option value="1688" {% if platform == '1688' %}selected{% endif %}>1688</option>
+        </select>
+    </div>
+    
+    <button onclick="applyFilters()" class="ps-btn primary" style="align-self: flex-end;">
+        > {{ '应用筛选' if lang == 'cn' else 'Apply Filters' }}
+    </button>
+    
+    <a href="/api/export/inventory?format=csv" class="ps-btn success" style="align-self: flex-end;">
+        > {{ '导出CSV' if lang == 'cn' else 'Export CSV' }}
+    </a>
+</div>
+
+<div class="terminal-output" style="margin: 15px 0;">
+    <pre style="color: var(--ps-text);">
+<code>
+<span class="terminal-info"># {{ '库存概览' if lang == 'cn' else 'Inventory Summary' }}</span>
+
+<span class="terminal-warning">$TotalItems</span>    = {{ inventory | length | default(0) }}
+<span class="terminal-warning">$LowStock</span>     = {{ low_stock_count | default(0) }}
+<span class="terminal-warning">$Critical</span>     = {{ critical_count | default(0) }}
+<span class="terminal-warning">$Healthy</span>      = {{ healthy_count | default(0) }}
+</code>
+    </pre>
+</div>
+
+<table class="ascii-table">
+    <thead>
+        <tr>
+            <th class="row-num">#</th>
+            <th>SKU</th>
+            <th>{{ '商品名称' if lang == 'cn' else 'Product Name' }}</th>
+            <th>Platform</th>
+            <th>{{ '当前库存' if lang == 'cn' else 'Current Stock' }}</th>
+            <th>{{ '阈值' if lang == 'cn' else 'Threshold' }}</th>
+            <th>{{ '状态' if lang == 'cn' else 'Status' }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% if inventory %}
+            {% for item in inventory %}
+            <tr class="{% if item.current_stock <= item.threshold %}alert-row{% elif item.current_stock <= item.threshold * 1.5 %}warning-row{% endif %}">
+                <td class="row-num">{{ loop.index }}</td>
+                <td>{{ item.sku }}</td>
+                <td>{{ item.product_name }}</td>
+                <td>{{ item.platform }}</td>
+                <td>{{ item.current_stock }}</td>
+                <td>{{ item.threshold }}</td>
+                <td>
+                    {% if item.current_stock <= 0 %}
+                        <span class="terminal-error">● {{ '缺货' if lang == 'cn' else 'OUT' }}</span>
+                    {% elif item.current_stock <= item.threshold %}
+                        <span class="terminal-error">● {{ '严重' if lang == 'cn' else 'CRITICAL' }}</span>
+                    {% elif item.current_stock <= item.threshold * 1.5 %}
+                        <span class="terminal-warning">● {{ '警告' if lang == 'cn' else 'WARNING' }}</span>
+                    {% else %}
+                        <span class="terminal-success">● {{ '正常' if lang == 'cn' else 'OK' }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        {% else %}
+            <tr>
+                <td colspan="7" style="text-align: center; color: var(--ps-text-dim);">
+                    {{ '暂无库存数据' if lang == 'cn' else 'No inventory data available' }}
+                </td>
+            </tr>
+        {% endif %}
+    </tbody>
+</table>
+
+<div class="terminal-output" style="margin-top: 20px;">
+    <span class="terminal-info">
+        {{ '提示: 使用上方筛选器调整显示条件' if lang == 'cn' else 'Tip: Use filters above to adjust display criteria' }}
+    </span>
+</div>
+
+<script>
+function applyFilters() {
+    const threshold = document.getElementById('threshold-input').value;
+    const platform = document.getElementById('platform-select').value;
+    let url = '/inventory?lang={{ lang }}';
+    if (threshold) url += '&threshold=' + threshold;
+    if (platform) url += '&platform=' + platform;
+    window.location.href = url;
+}
+</script>
+{% endblock %}
