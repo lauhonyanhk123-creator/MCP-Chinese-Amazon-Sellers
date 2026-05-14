@@ -1,0 +1,183 @@
+{% extends "base_ps.html" %}
+
+{% block title %}PS C:\Seller\Analytics>{% endblock %}
+
+{% block content %}
+<div class="terminal-header">{{ '数据分析中心' if lang == 'cn' else 'Analytics Center' }}</div>
+
+<div class="terminal-prompt">Get-Analytics -Period 30d<span class="cursor-blink"></span></div>
+
+<div class="terminal-output" style="margin: 20px 0;">
+    <pre style="color: var(--ps-text);">
+<code>
+<span class="terminal-info"># {{ '分析报告' if lang == 'cn' else 'Analytics Report' }} - {{ today | default('2026-05-14') }}</span>
+
+<span class="terminal-warning">$TotalRevenue</span>    = ${{ total_revenue | default('12,450.00') }}
+<span class="terminal-warning">$TotalOrders</span>     = {{ total_orders | default(156) }}
+<span class="terminal-warning">$AvgOrderValue</span>   = ${{ avg_order_value | default('79.81') }}
+<span class="terminal-warning">$ConversionRate</span>  = {{ conversion_rate | default('3.2') }}%
+</code>
+    </pre>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin: 20px 0;">
+    <div class="card-terminal">
+        <div class="card-header">
+            <h3>> {{ '收入趋势' if lang == 'cn' else 'Revenue Trend' }}</h3>
+        </div>
+        <div class="card-body">
+            <div class="metric-terminal">
+                <div class="value">${{ revenue_trend | default('+15.3%') }}</div>
+                <div class="label">{{ '较上周' if lang == 'cn' else 'vs last week' }}</div>
+            </div>
+            <pre style="color: var(--ps-green); font-size: 10px; line-height: 1;">
+    │
+ $12K├─────╮
+     │     ╰─╮
+ $10K├       ╰─╮
+     │         ╰─╮
+  $8K├           ╰─
+     │
+     └────────────────
+      Mon Tue Wed Thu Fri Sat Sun
+            </pre>
+        </div>
+    </div>
+
+    <div class="card-terminal">
+        <div class="card-header">
+            <h3>> {{ '订单统计' if lang == 'cn' else 'Order Statistics' }}</h3>
+        </div>
+        <div class="card-body">
+            <div class="metric-terminal">
+                <div class="value">{{ orders_today | default(23) }}</div>
+                <div class="label">{{ '今日订单' if lang == 'cn' else 'Orders Today' }}</div>
+            </div>
+            <pre style="color: var(--ps-cyan); font-size: 10px; line-height: 1;">
+    │
+  30├    ╭─╮
+    │  ╭─╯ ╰╮
+  20├──╯    ╰─╮
+    │         ╰─
+  10├
+    │
+    └────────────────
+      Mon Tue Wed Thu Fri Sat Sun
+            </pre>
+        </div>
+    </div>
+
+    <div class="card-terminal">
+        <div class="card-header">
+            <h3>> {{ '库存健康' if lang == 'cn' else 'Inventory Health' }}</h3>
+        </div>
+        <div class="card-body">
+            <div class="metric-terminal">
+                <div class="value">{{ health_score | default(85) }}%</div>
+                <div class="label">{{ '综合评分' if lang == 'cn' else 'Overall Score' }}</div>
+            </div>
+            <div class="ascii-progress" style="margin-top: 15px;">
+                <span style="color: var(--ps-yellow);">[</span>
+                <span class="ascii-progress-bar" style="width: {{ health_score | default(85) }}px;"></span>
+                <span class="ascii-progress-empty" style="width: {{ 100 - (health_score | default(85)) }}px;"></span>
+                <span style="color: var(--ps-yellow);">]</span>
+            </div>
+            <table class="ascii-table" style="margin-top: 15px; font-size: 12px;">
+                <tr>
+                    <td>{{ '健康商品' if lang == 'cn' else 'Healthy' }}</td>
+                    <td class="terminal-success">{{ healthy_count | default(45) }}</td>
+                </tr>
+                <tr>
+                    <td>{{ '警告商品' if lang == 'cn' else 'Warning' }}</td>
+                    <td class="terminal-warning">{{ warning_count | default(12) }}</td>
+                </tr>
+                <tr>
+                    <td>{{ '严重缺货' if lang == 'cn' else 'Critical' }}</td>
+                    <td class="terminal-error">{{ critical_count | default(3) }}</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="card-terminal">
+        <div class="card-header">
+            <h3>> {{ '评论分析' if lang == 'cn' else 'Review Analysis' }}</h3>
+        </div>
+        <div class="card-body">
+            <div class="metric-terminal">
+                <div class="value">{{ avg_rating | default(4.5) }}★</div>
+                <div class="label">{{ '平均评分' if lang == 'cn' else 'Average Rating' }}</div>
+            </div>
+            <pre style="color: var(--ps-text); font-size: 10px; line-height: 1.5;">
+★★★★★ {{ five_star | default(67) }}% ████████████████████
+★★★★☆ {{ four_star | default(20) }}% ██████
+★★★☆☆ {{ three_star | default(8) }}% ██
+★★☆☆☆ {{ two_star | default(3) }}% █
+★☆☆☆☆ {{ one_star | default(2) }}% █
+            </pre>
+        </div>
+    </div>
+</div>
+
+<div class="terminal-header" style="margin-top: 30px;">{{ '趋势分析' if lang == 'cn' else 'Trend Analysis' }}</div>
+
+<table class="ascii-table" style="margin-top: 15px;">
+    <thead>
+        <tr>
+            <th>{{ '指标' if lang == 'cn' else 'Metric' }}</th>
+            <th>{{ '当前值' if lang == 'cn' else 'Current' }}</th>
+            <th>{{ '上周' if lang == 'cn' else 'Last Week' }}</th>
+            <th>{{ '变化' if lang == 'cn' else 'Change' }}</th>
+            <th>{{ '趋势' if lang == 'cn' else 'Trend' }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>{{ '总收入' if lang == 'cn' else 'Total Revenue' }}</td>
+            <td>$12,450</td>
+            <td>$10,800</td>
+            <td class="terminal-success">+15.3%</td>
+            <td>↑</td>
+        </tr>
+        <tr>
+            <td>{{ '订单数' if lang == 'cn' else 'Orders' }}</td>
+            <td>156</td>
+            <td>142</td>
+            <td class="terminal-success">+9.9%</td>
+            <td>↑</td>
+        </tr>
+        <tr>
+            <td>{{ '低库存商品' if lang == 'cn' else 'Low Stock Items' }}</td>
+            <td>15</td>
+            <td>12</td>
+            <td class="terminal-error">+25.0%</td>
+            <td>↓</td>
+        </tr>
+        <tr>
+            <td>{{ '差评数' if lang == 'cn' else 'Negative Reviews' }}</td>
+            <td>3</td>
+            <td>5</td>
+            <td class="terminal-success">-40.0%</td>
+            <td>↑</td>
+        </tr>
+        <tr>
+            <td>{{ '转化率' if lang == 'cn' else 'Conversion Rate' }}</td>
+            <td>3.2%</td>
+            <td>2.8%</td>
+            <td class="terminal-success">+14.3%</td>
+            <td>↑</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="terminal-output" style="margin-top: 20px;">
+    <span class="terminal-info">
+        {{ '提示: 使用命令 Get-Report -Format PDF 导出完整报告' if lang == 'cn' else 'Tip: Use Get-Report -Format PDF to export full report' }}
+    </span>
+</div>
+
+<div style="display: flex; gap: 10px; margin-top: 20px;">
+    <a href="/api/export/analytics?format=csv" class="ps-btn success">> {{ '导出CSV' if lang == 'cn' else 'Export CSV' }}</a>
+    <a href="/api/export/report" class="ps-btn primary">> {{ '导出PDF报告' if lang == 'cn' else 'Export PDF Report' }}</a>
+</div>
+{% endblock %}

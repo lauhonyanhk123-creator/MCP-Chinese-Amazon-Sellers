@@ -1,0 +1,201 @@
+{% extends "base_ps.html" %}
+
+{% block title %}PS C:\Seller\Dashboard>{% endblock %}
+
+{% block content %}
+<div class="terminal-header">{{ '仪表板概览' if lang == 'cn' else 'Dashboard Overview' }}</div>
+
+<div class="terminal-prompt">Get-DashboardMetrics< span class="cursor-blink"></span></div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin: 20px 0;">
+    <div class="card-terminal">
+        <div class="card-header">
+            <h3>> {{ '低库存警报' if lang == 'cn' else 'Low Stock Alerts' }}</h3>
+            <span class="terminal-btn {% if low_stock_critical > 0 %}close{% else %}maximize{% endif %}"></span>
+        </div>
+        <div class="card-body">
+            <div class="metric-terminal {% if low_stock_critical > 0 %}danger{% elif low_stock_count > 5 %}warning{% endif %}">
+                <div class="value">{{ low_stock_count | default(0) }}</div>
+                <div class="label">{{ '低于阈值的商品' if lang == 'cn' else 'Items Below Threshold' }}</div>
+            </div>
+            <div class="terminal-output" style="margin-top: 10px;">
+                <span class="terminal-{% if low_stock_critical > 0 %}error{% else %}success{% endif %}">
+                    {% if low_stock_critical > 0 %}
+                        [ERROR] {{ low_stock_critical }} {{ '件商品严重缺货' if lang == 'cn' else 'items critically low' }}
+                    {% else %}
+                        [OK] {{ '库存状态正常' if lang == 'cn' else 'Stock levels healthy' }}
+                    {% endif %}
+                </span>
+            </div>
+            <a href="/inventory?lang={{ lang }}" class="ps-btn" style="margin-top: 10px; width: 100%;">
+                > {{ '查看库存' if lang == 'cn' else 'View Inventory' }}
+            </a>
+        </div>
+    </div>
+
+    <div class="card-terminal">
+        <div class="card-header">
+            <h3>> {{ '待处理订单' if lang == 'cn' else 'Pending Orders' }}</h3>
+            <span class="terminal-btn {% if pending_orders_count > 5 %}close{% else %}maximize{% endif %}"></span>
+        </div>
+        <div class="card-body">
+            <div class="metric-terminal {% if pending_orders_count > 10 %}danger{% elif pending_orders_count > 5 %}warning{% endif %}">
+                <div class="value">{{ pending_orders_count | default(0) }}</div>
+                <div class="label">{{ '等待发货' if lang == 'cn' else 'Awaiting Shipment' }}</div>
+            </div>
+            <div class="terminal-output" style="margin-top: 10px;">
+                <span class="terminal-{% if pending_orders_count > 5 %}warning{% else %}success{% endif %}">
+                    {% if pending_orders_count > 5 %}
+                        [WARN] {{ '订单积压' if lang == 'cn' else 'Order backlog detected' }}
+                    {% else %}
+                        [OK] {{ '订单处理正常' if lang == 'cn' else 'Orders processing normally' }}
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-terminal">
+        <div class="card-header">
+            <h3>> {{ '评论监控' if lang == 'cn' else 'Review Monitor' }}</h3>
+            <span class="terminal-btn {% if negative_reviews_count > 0 %}close{% else %}maximize{% endif %}"></span>
+        </div>
+        <div class="card-body">
+            <div class="metric-terminal {% if negative_reviews_count > 3 %}danger{% elif negative_reviews_count > 0 %}warning{% endif %}">
+                <div class="value">{{ negative_reviews_count | default(0) }}</div>
+                <div class="label">{{ '差评待处理' if lang == 'cn' else 'Negative Reviews' }}</div>
+            </div>
+            <div class="terminal-output" style="margin-top: 10px;">
+                <span class="terminal-{% if negative_reviews_count > 0 %}warning{% else %}success{% endif %}">
+                    {% if negative_reviews_count > 0 %}
+                        [WARN] {{ '需要回复差评' if lang == 'cn' else 'Response required' }}
+                    {% else %}
+                        [OK] {{ '评论状态良好' if lang == 'cn' else 'Reviews looking good' }}
+                    {% endif %}
+                </span>
+            </div>
+            <a href="/reviews?lang={{ lang }}" class="ps-btn" style="margin-top: 10px; width: 100%;">
+                > {{ '查看评论' if lang == 'cn' else 'View Reviews' }}
+            </a>
+        </div>
+    </div>
+
+    <div class="card-terminal">
+        <div class="card-header">
+            <h3>> {{ '库存健康度' if lang == 'cn' else 'Inventory Health' }}</h3>
+            <span class="terminal-btn maximize"></span>
+        </div>
+        <div class="card-body">
+            <div class="metric-terminal">
+                <div class="value">{{ health_score | default(85) }}%</div>
+                <div class="label">{{ '综合评分' if lang == 'cn' else 'Overall Score' }}</div>
+            </div>
+            <div class="terminal-output" style="margin-top: 10px;">
+                <div class="ascii-progress">
+                    <span style="color: var(--ps-yellow);">[</span>
+                    <span class="ascii-progress-bar" style="width: {{ health_score | default(85) }}px;"></span>
+                    <span class="ascii-progress-empty" style="width: {{ 100 - (health_score | default(85)) }}px;"></span>
+                    <span style="color: var(--ps-yellow);">]</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="terminal-header" style="margin-top: 30px;">{{ '快速操作' if lang == 'cn' else 'Quick Actions' }}</div>
+
+<div class="command-prompt" style="margin: 15px 0;">
+    <span class="prompt-symbol">PS C:\Seller></span>
+    <input type="text" placeholder="{{ '输入命令或搜索...' if lang == 'cn' else 'Enter command or search...' }}" id="command-input">
+</div>
+
+<div class="terminal-output" style="margin: 20px 0;">
+    <pre style="color: var(--ps-text-dim);">
+┌─────────────────────────────────────────────────────────────────────┐
+│  {{ '可用命令' if lang == 'cn' else 'Available Commands' }}                                                  │
+├─────────────────────────────────────────────────────────────────────┤
+│  > Get-Inventory        {{ '获取库存列表' if lang == 'cn' else 'Get inventory list' }}                          │
+│  > Get-Orders           {{ '获取订单列表' if lang == 'cn' else 'Get orders list' }}                             │
+│  > Get-LowStockAlerts   {{ '获取低库存警报' if lang == 'cn' else 'Get low stock alerts' }}                      │
+│  > Get-Reviews          {{ '获取评论列表' if lang == 'cn' else 'Get reviews list' }}                            │
+│  > Sync-Inventory       {{ '同步库存数据' if lang == 'cn' else 'Sync inventory data' }}                         │
+│  > Get-CompetitorPrices {{ '获取竞争对手价格' if lang == 'cn' else 'Get competitor prices' }}                   │
+│  > help                 {{ '显示帮助信息' if lang == 'cn' else 'Show help information' }}                       │
+└─────────────────────────────────────────────────────────────────────┘
+    </pre>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 20px 0;">
+    <a href="/inventory?lang={{ lang }}" class="ps-btn success">> Get-Inventory</a>
+    <a href="/profit?lang={{ lang }}" class="ps-btn success">> Get-Profit</a>
+    <a href="/reviews?lang={{ lang }}" class="ps-btn success">> Get-Reviews</a>
+    <a href="/analytics?lang={{ lang }}" class="ps-btn success">> Get-Analytics</a>
+    <a href="/tasks?lang={{ lang }}" class="ps-btn">> Get-Tasks</a>
+    <a href="/notifications?lang={{ lang }}" class="ps-btn">> Get-Notifications</a>
+</div>
+
+<div class="terminal-header" style="margin-top: 30px;">{{ '系统状态' if lang == 'cn' else 'System Status' }}</div>
+
+<table class="ascii-table" style="margin-top: 15px;">
+    <thead>
+        <tr>
+            <th>{{ '组件' if lang == 'cn' else 'Component' }}</th>
+            <th>{{ '状态' if lang == 'cn' else 'Status' }}</th>
+            <th>{{ '最后更新' if lang == 'cn' else 'Last Updated' }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>1688 API</td>
+            <td class="terminal-success">● {{ '已连接' if lang == 'cn' else 'Connected' }}</td>
+            <td>{{ last_updated | default('刚刚') }}</td>
+        </tr>
+        <tr>
+            <td>Amazon SP-API</td>
+            <td class="terminal-success">● {{ '已连接' if lang == 'cn' else 'Connected' }}</td>
+            <td>{{ last_updated | default('刚刚') }}</td>
+        </tr>
+        <tr>
+            <td>{{ '数据库' if lang == 'cn' else 'Database' }}</td>
+            <td class="terminal-success">● {{ '正常' if lang == 'cn' else 'Healthy' }}</td>
+            <td>{{ last_updated | default('刚刚') }}</td>
+        </tr>
+        <tr>
+            <td>{{ '缓存服务' if lang == 'cn' else 'Cache Service' }}</td>
+            <td class="terminal-warning">● {{ '降级模式' if lang == 'cn' else 'Degraded' }}</td>
+            <td>-</td>
+        </tr>
+    </tbody>
+</table>
+
+<script>
+document.getElementById('command-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        const cmd = this.value.trim().toLowerCase();
+        const commands = {
+            'get-inventory': '/inventory?lang={{ lang }}',
+            'get-orders': '/?lang={{ lang }}',
+            'get-lowstockalerts': '/inventory?lang={{ lang }}',
+            'get-reviews': '/reviews?lang={{ lang }}',
+            'sync-inventory': '/inventory?lang={{ lang }}',
+            'get-competitorprices': '/?lang={{ lang }}',
+            'get-profit': '/profit?lang={{ lang }}',
+            'get-analytics': '/analytics?lang={{ lang }}',
+            'get-tasks': '/tasks?lang={{ lang }}',
+            'get-notifications': '/notifications?lang={{ lang }}',
+            'help': null
+        };
+        
+        if (cmd === 'help') {
+            alert('{{ '命令列表已在上方显示' if lang == 'cn' else 'Command list shown above' }}');
+        } else if (commands[cmd]) {
+            window.location.href = commands[cmd];
+        } else if (cmd) {
+            alert('{{ '未知命令: ' if lang == 'cn' else 'Unknown command: ' }}' + cmd);
+        }
+        
+        this.value = '';
+    }
+});
+</script>
+{% endblock %}

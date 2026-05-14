@@ -1684,7 +1684,8 @@ def login():
         else:
             flash(get_text(lang, 'invalid_credentials'), 'error')
 
-    return render_template('login.html', lang=lang, get_text=lambda key: get_text(lang, key))
+    template_name = 'login_ps.html' if session.get('theme') == 'powershell' else 'login.html'
+    return render_template(template_name, lang=lang, get_text=lambda key: get_text(lang, key))
 
 @app.route('/logout')
 def logout():
@@ -1894,6 +1895,7 @@ def dashboard():
     negative_reviews_count = 0
     negative_reviews_critical = 0
     todays_revenue = 0.0
+    health_score = 85
 
     low_stock_history = [0] * 7
     revenue_history = [0.0] * 7
@@ -2041,7 +2043,8 @@ def dashboard():
     except Exception:
         rate_limit_info = {'limit': 100, 'remaining': 100, 'reset': int(time.time()) + 3600, 'tier': 'FREE'}
 
-    return render_template('dashboard.html',
+    template_name = 'dashboard_ps.html' if session.get('theme') == 'powershell' else 'dashboard.html'
+    return render_template(template_name,
                          lang=lang,
                          get_text=lambda key: get_text(lang, key),
                          low_stock_count=low_stock_count,
@@ -2065,7 +2068,23 @@ def dashboard():
                          low_stock_status=low_stock_status,
                          reviews_status=reviews_status,
                          orders_status=orders_status,
+                         health_score=health_score,
                          request=request)
+
+@app.route('/ps')
+@app.route('/powershell')
+def powershell_theme():
+    """Enable PowerShell theme and redirect to dashboard"""
+    session['theme'] = 'powershell'
+    lang = request.args.get('lang', 'cn')
+    return redirect(f'/dashboard?lang={lang}')
+
+@app.route('/theme/<theme_name>')
+def set_theme(theme_name):
+    """Set UI theme"""
+    session['theme'] = theme_name
+    lang = request.args.get('lang', 'cn')
+    return redirect(request.referrer or f'/?lang={lang}')
 
 @app.route('/analytics')
 @login_required
@@ -2131,7 +2150,8 @@ def analytics():
     if is_mock_data:
         orders_aggregated = orders_data
 
-    return render_template('analytics.html',
+    template_name = 'analytics_ps.html' if session.get('theme') == 'powershell' else 'analytics.html'
+    return render_template(template_name,
                          lang=lang,
                          get_text=lambda key: get_text(lang, key),
                          date_range=date_range,
@@ -2163,7 +2183,8 @@ def inventory():
     except Exception:
         inventory_data = []
 
-    return render_template('inventory.html',
+    template_name = 'inventory_ps.html' if session.get('theme') == 'powershell' else 'inventory.html'
+    return render_template(template_name,
                          lang=lang,
                          get_text=lambda key: get_text(lang, key),
                          inventory_data=inventory_data,
