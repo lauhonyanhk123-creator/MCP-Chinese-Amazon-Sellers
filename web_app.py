@@ -14,6 +14,7 @@ REST API Endpoints:
 
 import asyncio
 import csv
+import hashlib
 import io
 import json
 import math
@@ -43,6 +44,7 @@ from flask import (
     session,
     url_for,
 )
+from flask_compress import Compress
 
 load_dotenv()
 
@@ -61,6 +63,76 @@ from auth import (
 )
 from notification import NotificationPreference, NotificationTemplates, get_notification_service
 from rate_limiter import get_rate_limiter, rate_limit
+from cache import CacheManager, cached
+
+cache_manager = CacheManager()
+
+_process_start_time = datetime.now()
+_request_counter = 0
+_request_counter_lock = threading.Lock()
+_endpoint_timings = {}
+_endpoint_timings_lock = threading.Lock()
+
+_redis_pool = None
+
+def get_redis_pool():
+    """Get or create Redis connection pool for connection reuse."""
+    global _redis_pool
+    if _redis_pool is None:
+        import redis
+        redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379')
+        _redis_pool = redis.ConnectionPool.from_url(
+            redis_url,
+            max_connections=50,
+            decode_responses=True
+        )
+    return _redis_pool
+
+
+def get_uptime():
+    """Get uptime statistics"""
+    global _request_counter
+    current_time = datetime.now()
+    uptime_seconds = (current_time - _process_start_time).total_seconds()
+    
+    return {
+        'start_time': _process_start_time.isoformat(),
+        'uptime_seconds': uptime_seconds,
+        'total_requests': _request_counter
+    }
+
+
+def track_request_time(f):
+    """Decorator to track endpoint response times"""
+    from functools import wraps
+    import time
+    
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        global _endpoint_timings, _request_counter
+        
+        with _request_counter_lock:
+            _request_counter += 1
+        
+        start_time = time.time()
+        result = f(*args, **kwargs)
+        elapsed = time.time() - start_time
+        
+        endpoint_name = f.__name__
+        with _endpoint_timings_lock:
+            if endpoint_name not in _endpoint_timings:
+                _endpoint_timings[endpoint_name] = []
+            _endpoint_timings[endpoint_name].append({
+                'timestamp': datetime.now().isoformat(),
+                'duration_ms': round(elapsed * 1000, 2)
+            })
+            if len(_endpoint_timings[endpoint_name]) > 100:
+                _endpoint_timings[endpoint_name] = _endpoint_timings[endpoint_name][-100:]
+        
+        return result
+    
+    return decorated_function
+
 
 
 def generate_date_range(days: int) -> list[str]:
@@ -92,9 +164,29 @@ def log_audit(user_id, action, resource_type, resource_id=None, details=None):
         user_agent=user_agent
     )
 
+def generate_etag(data: Any) -> str:
+    """Generate ETag from data using MD5 hash"""
+    data_str = json.dumps(data, sort_keys=True, default=str)
+    hash_value = hashlib.md5(data_str.encode()).hexdigest()
+    return f'"{hash_value}"'
+
+def add_etag_and_cache(response: Response, max_age: int = 60) -> Response:
+    """Add ETag and Cache-Control headers to response"""
+    response.headers['Cache-Control'] = f'public, max-age={max_age}'
+    return response
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 app.jinja_env.filters['format_currency'] = format_currency_filter
+
+@app.after_request
+def add_security_headers(response):
+    """Add security headers to all responses"""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
 
 SWAGGER_CONFIG = {
     'title': 'Cross-Border Seller API',
@@ -128,6 +220,8 @@ SWAGGER_CONFIG = {
 }
 
 swagger = Swagger(app, config=SWAGGER_CONFIG)
+
+Compress(app)
 
 @app.context_processor
 def inject_user_session():
@@ -191,6 +285,38 @@ def health_check():
 
     status_code = 200 if health_status['status'] == 'healthy' else 503
     return jsonify(health_status), status_code
+
+
+@app.route('/api/performance')
+@app.route('/api/metrics')
+@login_required
+def performance_metrics():
+    """Return performance metrics for monitoring"""
+    lang = request.args.get('lang', 'en')
+    
+    with _endpoint_timings_lock:
+        timings_summary = {}
+        for endpoint, records in _endpoint_timings.items():
+            if records:
+                durations = [r['duration_ms'] for r in records]
+                timings_summary[endpoint] = {
+                    'count': len(durations),
+                    'avg_ms': round(sum(durations) / len(durations), 2),
+                    'min_ms': round(min(durations), 2),
+                    'max_ms': round(max(durations), 2)
+                }
+    
+    metrics = {
+        'cache': cache_manager.get_stats(),
+        'database': {
+            'status': 'ok'
+        },
+        'uptime': get_uptime(),
+        'endpoint_timings': timings_summary
+    }
+    
+    return jsonify(metrics)
+
 
 TEXT = {
     'cn': {
@@ -3215,12 +3341,20 @@ def api_list_tools():
             'parameter_details': params
         })
 
-    return jsonify({
+    response_data = {
         'success': True,
         'message': get_text(lang, 'api_tools_list'),
         'total_tools': len(tools_list),
         'tools': tools_list
-    })
+    }
+
+    etag = generate_etag(response_data)
+    if request.headers.get('If-None-Match') == etag:
+        return '', 304
+
+    response = make_response(jsonify(response_data))
+    response.headers['ETag'] = etag
+    return add_etag_and_cache(response, max_age=300)
 
 @app.route('/api/tools/<tool_name>', methods=['GET'])
 def api_get_tool_info(tool_name: str):
@@ -3297,7 +3431,7 @@ def api_get_tool_info(tool_name: str):
     required = [p for p, v in params.items() if v.get('required', False)]
     optional = [p for p, v in params.items() if not v.get('required', False)]
 
-    return jsonify({
+    response_data = {
         'success': True,
         'message': get_text(lang, 'api_tool_info'),
         'tool': {
@@ -3308,7 +3442,15 @@ def api_get_tool_info(tool_name: str):
             'parameter_details': params,
             'example_usage': _get_tool_example(tool_name)
         }
-    })
+    }
+
+    etag = generate_etag(response_data)
+    if request.headers.get('If-None-Match') == etag:
+        return '', 304
+
+    response = make_response(jsonify(response_data))
+    response.headers['ETag'] = etag
+    return add_etag_and_cache(response, max_age=300)
 
 @app.route('/api/tools/<tool_name>', methods=['POST'])
 def api_call_tool(tool_name: str):
@@ -3448,6 +3590,14 @@ def api_call_tool(tool_name: str):
         result = AsyncRunner.run_async(call_mcp_tool(tool_name, merged_params))
 
         if result.get('success'):
+            try:
+                cache_manager.invalidate_pattern('api:tools:*')
+                if tool_name in ('sync_inventory', 'sync_price', 'update_amazon_price',
+                                 'save_product_profile', 'update_fulfillment_amazon'):
+                    cache_manager.invalidate_pattern('api:analytics:*')
+            except Exception:
+                pass
+
             return jsonify({
                 'success': True,
                 'message': get_text(lang, 'api_tool_called'),
@@ -3539,6 +3689,14 @@ def api_call_tool_with_name():
         result = AsyncRunner.run_async(call_mcp_tool(tool_name, params))
 
         if result.get('success'):
+            try:
+                cache_manager.invalidate_pattern('api:tools:*')
+                if tool_name in ('sync_inventory', 'sync_price', 'update_amazon_price',
+                                 'save_product_profile', 'update_fulfillment_amazon'):
+                    cache_manager.invalidate_pattern('api:analytics:*')
+            except Exception:
+                pass
+
             return jsonify({
                 'success': True,
                 'message': get_text(lang, 'api_tool_called'),
@@ -4113,12 +4271,20 @@ def api_get_history(metric):
 
     try:
         snapshots = get_snapshots(metric, start_date, end_date)
-        return jsonify({
+        response_data = {
             'success': True,
             'metric': metric,
             'count': len(snapshots),
             'snapshots': snapshots
-        })
+        }
+
+        etag = generate_etag(response_data)
+        if request.headers.get('If-None-Match') == etag:
+            return '', 304
+
+        response = make_response(jsonify(response_data))
+        response.headers['ETag'] = etag
+        return add_etag_and_cache(response, max_age=120)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -4232,7 +4398,15 @@ def api_analytics_summary():
     try:
         stats = analyzer.get_comparative_stats()
         health = analyzer.get_inventory_health_score()
-        return jsonify({'success': True, 'comparative_stats': stats, 'health_score': health})
+        response_data = {'success': True, 'comparative_stats': stats, 'health_score': health}
+
+        etag = generate_etag(response_data)
+        if request.headers.get('If-None-Match') == etag:
+            return '', 304
+
+        response = make_response(jsonify(response_data))
+        response.headers['ETag'] = etag
+        return add_etag_and_cache(response, max_age=60)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -4286,7 +4460,7 @@ def api_health():
                 active_tasks:
                   type: integer
     """
-    return jsonify({
+    response_data = {
         'success': True,
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
@@ -4296,7 +4470,15 @@ def api_health():
             'total_tasks': len(TASK_QUEUE),
             'active_tasks': len(get_active_tasks())
         }
-    })
+    }
+
+    etag = generate_etag(response_data)
+    if request.headers.get('If-None-Match') == etag:
+        return '', 304
+
+    response = make_response(jsonify(response_data))
+    response.headers['ETag'] = etag
+    return add_etag_and_cache(response, max_age=30)
 
 @app.route('/api/inventory/forecast', methods=['GET'])
 def api_inventory_forecast():
@@ -4373,7 +4555,7 @@ def api_inventory_health():
 
         risk_products = analyzer.identify_risk_products(threshold_days=14)
 
-        return jsonify({
+        response_data = {
             'success': True,
             'health': health_score,
             'risk_summary': {
@@ -4383,7 +4565,15 @@ def api_inventory_health():
                 'medium': sum(1 for p in risk_products if p['risk_level'] == 'medium'),
                 'low': sum(1 for p in risk_products if p['risk_level'] == 'low')
             }
-        })
+        }
+
+        etag = generate_etag(response_data)
+        if request.headers.get('If-None-Match') == etag:
+            return '', 304
+
+        response = make_response(jsonify(response_data))
+        response.headers['ETag'] = etag
+        return add_etag_and_cache(response, max_age=60)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

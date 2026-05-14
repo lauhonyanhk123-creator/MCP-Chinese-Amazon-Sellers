@@ -37,6 +37,9 @@ bcrypt>=4.0.0
 # Rate limiting (optional - for API rate limiting)
 flask-limiter>=3.5.0
 
+# Gzip compression for API responses
+flask-compress>=1.14.0
+
 # OpenAPI/Swagger support
 flasgger>=0.9.7
 

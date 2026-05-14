@@ -13,12 +13,68 @@ from typing import Any
 DB_PATH = Path(__file__).parent / "seller_data.db"
 
 
+def create_indexes():
+    """Create database indexes for optimized query performance"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_audit_user_id ON audit_logs(user_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_snapshots_date ON historical_snapshots(date)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_sessions_user ON user_sessions(user_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id)')
+    except sqlite3.OperationalError:
+        pass
+    
+    conn.commit()
+    conn.close()
+
+
+def paginate_query(query, page=1, per_page=50):
+    """Return (results, total_pages, total_count)"""
+    offset = (page - 1) * per_page
+    total_count = query.count()
+    results = query.limit(per_page).offset(offset).all()
+    total_pages = (total_count + per_page - 1) // per_page
+    return results, total_pages, total_count
+
+
+def paginate_sql(table: str, columns: str = "*", where: str = "",
+                 params: tuple = (), order_by: str = "created_at DESC",
+                 page: int = 1, per_page: int = 50) -> tuple[list[dict], int, int]:
+    """Paginated SQL query for sqlite3.
+
+    Returns (results, total_count, total_pages)
+    """
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    count_sql = f"SELECT COUNT(*) FROM {table}" + (f" WHERE {where}" if where else "")
+    cursor.execute(count_sql, params)
+    total_count = cursor.fetchone()[0]
+
+    total_pages = (total_count + per_page - 1) // per_page if total_count > 0 else 1
+    offset = (page - 1) * per_page
+
+    sql = f"SELECT {columns} FROM {table}"
+    if where:
+        sql += f" WHERE {where}"
+    sql += f" ORDER BY {order_by} LIMIT ? OFFSET ?"
+
+    cursor.execute(sql, params + (per_page, offset))
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [dict(row) for row in rows], total_count, total_pages
+
+
 def init_db():
     """Initialize the database"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # Product profiles table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS product_profiles (
             sku TEXT PRIMARY KEY,
@@ -39,7 +95,6 @@ def init_db():
         )
     ''')
 
-    # User settings table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_settings (
             key TEXT PRIMARY KEY,
@@ -47,7 +102,6 @@ def init_db():
         )
     ''')
 
-    # Historical snapshots table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS historical_snapshots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,11 +113,10 @@ def init_db():
     ''')
 
     cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_snapshot_type_date 
+        CREATE INDEX IF NOT EXISTS idx_snapshot_type_date
         ON historical_snapshots (snapshot_type, snapshot_date)
     ''')
 
-    # Users table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             user_id TEXT PRIMARY KEY,
@@ -76,7 +129,6 @@ def init_db():
         )
     ''')
 
-    # User sessions table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_sessions (
             session_id TEXT PRIMARY KEY,
@@ -90,7 +142,6 @@ def init_db():
         )
     ''')
 
-    # Password reset tokens table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS password_resets (
             user_id TEXT PRIMARY KEY,
@@ -102,16 +153,10 @@ def init_db():
     ''')
 
     cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_users_email 
-        ON users (email)
-    ''')
-
-    cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_sessions_user_id 
+        CREATE INDEX IF NOT EXISTS idx_sessions_user_id
         ON user_sessions (user_id)
     ''')
 
-    # Audit logs table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS audit_logs (
             log_id TEXT PRIMARY KEY,
@@ -124,11 +169,6 @@ def init_db():
             user_agent TEXT,
             timestamp TEXT NOT NULL
         )
-    ''')
-
-    cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_audit_user_id
-        ON audit_logs (user_id)
     ''')
 
     cursor.execute('''
@@ -146,7 +186,6 @@ def init_db():
         ON audit_logs (resource_type, resource_id)
     ''')
 
-    # API keys table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS api_keys (
             key_id TEXT PRIMARY KEY,
@@ -168,6 +207,8 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+    create_indexes()
 
 
 def save_product_profile(sku: str, **kwargs):
@@ -206,17 +247,17 @@ def get_product_profile(sku: str):
     return None
 
 
-def get_all_product_profiles():
-    """Get all product profiles"""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+def get_all_product_profiles(page: int = 1, per_page: int = 50):
+    """Get all product profiles with pagination.
 
-    cursor.execute('SELECT * FROM product_profiles ORDER BY last_updated DESC')
-    rows = cursor.fetchall()
-    conn.close()
-
-    return [dict(row) for row in rows]
+    Returns (results, total_count, total_pages)
+    """
+    return paginate_sql(
+        "product_profiles",
+        order_by="last_updated DESC",
+        page=page,
+        per_page=per_page
+    )
 
 
 def delete_product_profile(sku: str):
@@ -321,51 +362,36 @@ def save_snapshot(snapshot_type: str, data: Any) -> int:
 def get_snapshots(
     snapshot_type: str,
     start_date: str | None = None,
-    end_date: str | None = None
-) -> list[dict[str, Any]]:
-    """Get historical snapshots of a specific type within a date range
-    
+    end_date: str | None = None,
+    page: int = 1,
+    per_page: int = 50
+) -> tuple[list[dict[str, Any]], int, int]:
+    """Get historical snapshots of a specific type within a date range with pagination.
+
     Args:
         snapshot_type: Type of snapshot ('inventory', 'orders', 'reviews', 'competitors')
         start_date: Start date in ISO format (YYYY-MM-DD), defaults to 30 days ago
         end_date: End date in ISO format (YYYY-MM-DD), defaults to today
-    
-    Returns:
-        List of snapshot dictionaries
-    """
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+        page: Page number (default: 1)
+        per_page: Items per page (default: 50)
 
+    Returns:
+        Tuple of (snapshots list, total_count, total_pages)
+    """
     if end_date is None:
         end_date = date.today().isoformat()
     if start_date is None:
         start_date = (datetime.now() - timedelta(days=30)).date().isoformat()
 
-    cursor.execute('''
-        SELECT id, snapshot_date, snapshot_type, data, created_at
-        FROM historical_snapshots
-        WHERE snapshot_type = ?
-          AND snapshot_date >= ?
-          AND snapshot_date <= ?
-        ORDER BY snapshot_date DESC
-    ''', (snapshot_type, start_date, end_date))
-
-    rows = cursor.fetchall()
-    conn.close()
-
-    snapshots = []
-    for row in rows:
-        snapshot = {
-            'id': row['id'],
-            'snapshot_date': row['snapshot_date'],
-            'snapshot_type': row['snapshot_type'],
-            'data': json.loads(row['data']),
-            'created_at': row['created_at']
-        }
-        snapshots.append(snapshot)
-
-    return snapshots
+    return paginate_sql(
+        "historical_snapshots",
+        columns="id, snapshot_date, snapshot_type, data, created_at",
+        where="snapshot_type = ? AND snapshot_date >= ? AND snapshot_date <= ?",
+        params=(snapshot_type, start_date, end_date),
+        order_by="snapshot_date DESC",
+        page=page,
+        per_page=per_page
+    )
 
 
 def get_latest_snapshot(snapshot_type: str) -> dict[str, Any] | None:
@@ -542,31 +568,18 @@ def get_user_by_id(user_id: str) -> dict[str, Any] | None:
     return None
 
 
-def get_all_users() -> list[dict[str, Any]]:
-    """Get all users"""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+def get_all_users(page: int = 1, per_page: int = 50) -> tuple[list[dict[str, Any]], int, int]:
+    """Get all users with pagination.
 
-    cursor.execute('''
-        SELECT user_id, email, role, created_at, last_login, is_active
-        FROM users ORDER BY created_at DESC
-    ''')
-
-    rows = cursor.fetchall()
-    conn.close()
-
-    return [
-        {
-            "user_id": row["user_id"],
-            "email": row["email"],
-            "role": row["role"],
-            "created_at": row["created_at"],
-            "last_login": row["last_login"],
-            "is_active": bool(row["is_active"])
-        }
-        for row in rows
-    ]
+    Returns (users, total_count, total_pages)
+    """
+    return paginate_sql(
+        "users",
+        columns="user_id, email, role, created_at, last_login, is_active",
+        order_by="created_at DESC",
+        page=page,
+        per_page=per_page
+    )
 
 
 def update_user_last_login(user_id: str) -> bool:
@@ -750,38 +763,24 @@ def revoke_api_key(key_id: str, user_id: str | None = None) -> bool:
     return updated
 
 
-def get_user_api_keys(user_id: str) -> list[dict[str, Any]]:
-    """List all API keys for a user
-    
+def get_user_api_keys(user_id: str, page: int = 1, per_page: int = 50) -> tuple[list[dict[str, Any]], int, int]:
+    """List all API keys for a user with pagination.
+
     Args:
         user_id: User ID
-    
+        page: Page number (default: 1)
+        per_page: Items per page (default: 50)
+
     Returns:
-        List of API key info (without the actual key hash)
+        Tuple of (api_keys list, total_count, total_pages)
     """
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    cursor.execute('''
-        SELECT key_id, name, created_at, last_used, is_active, rate_limit
-        FROM api_keys
-        WHERE user_id = ?
-        ORDER BY created_at DESC
-    ''', (user_id,))
-
-    rows = cursor.fetchall()
-    conn.close()
-
-    return [
-        {
-            "key_id": row['key_id'],
-            "name": row['name'],
-            "created_at": row['created_at'],
-            "last_used": row['last_used'],
-            "is_active": bool(row['is_active']),
-            "rate_limit": row['rate_limit']
-        }
-        for row in rows
-    ]
+    return paginate_sql(
+        "api_keys",
+        columns="key_id, name, created_at, last_used, is_active, rate_limit",
+        where="user_id = ?",
+        params=(user_id,),
+        order_by="created_at DESC",
+        page=page,
+        per_page=per_page
+    )
 

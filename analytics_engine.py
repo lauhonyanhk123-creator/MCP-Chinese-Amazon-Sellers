@@ -50,6 +50,18 @@ class HistoricalDataAnalyzer:
     def __init__(self):
         self.snapshot_types = ['inventory', 'orders', 'reviews', 'competitors']
 
+    @staticmethod
+    def _get_snapshot_data(snapshot: dict) -> dict:
+        """Extract and parse data from a snapshot, handling JSON strings"""
+        data_raw = snapshot.get('data', {})
+        if isinstance(data_raw, str):
+            try:
+                import json
+                return json.loads(data_raw)
+            except (json.JSONDecodeError, ValueError):
+                return {}
+        return data_raw if isinstance(data_raw, dict) else {}
+
     def calculate_trends(self, metric: str, days: int = 30) -> TrendResult:
         """Calculate trends for a specific metric
         
@@ -60,7 +72,7 @@ class HistoricalDataAnalyzer:
         Returns:
             TrendResult with trend analysis
         """
-        snapshots = get_snapshots('inventory', start_date=None, end_date=None)
+        snapshots, _, _ = get_snapshots('inventory', start_date=None, end_date=None)
 
         if not snapshots:
             return self._empty_trend_result(metric)
@@ -76,7 +88,7 @@ class HistoricalDataAnalyzer:
         dates = []
 
         for snapshot in snapshots:
-            data = snapshot.get('data', {})
+            data = self._get_snapshot_data(snapshot)
             value = self._extract_metric_value(data, metric)
             if value is not None:
                 values.append(value)
@@ -216,7 +228,7 @@ class HistoricalDataAnalyzer:
         if len(historical_data) >= 7:
             velocity_values = []
             for snapshot in historical_data[-7:]:
-                data = snapshot.get('data', {})
+                data = self._get_snapshot_data(snapshot)
                 orders = data.get('order_count', data.get('total_orders', 0))
                 velocity_values.append(float(orders))
 
@@ -250,8 +262,8 @@ class HistoricalDataAnalyzer:
         prev_end_date = (datetime.now() - timedelta(days=period)).date().isoformat()
         prev_start_date = (datetime.now() - timedelta(days=period * 2)).date().isoformat()
 
-        current_snapshots = get_snapshots('inventory', start_date, end_date)
-        previous_snapshots = get_snapshots('inventory', prev_start_date, prev_end_date)
+        current_snapshots, _, _ = get_snapshots('inventory', start_date, end_date)
+        previous_snapshots, _, _ = get_snapshots('inventory', prev_start_date, prev_end_date)
 
         current_value = self._calculate_period_average(current_snapshots, metric)
         previous_value = self._calculate_period_average(previous_snapshots, metric)
@@ -294,7 +306,7 @@ class HistoricalDataAnalyzer:
 
         values = []
         for snapshot in snapshots:
-            data = snapshot.get('data', {})
+            data = self._get_snapshot_data(snapshot)
             value = self._extract_metric_value(data, metric)
             if value is not None:
                 values.append(value)
@@ -325,8 +337,8 @@ class HistoricalDataAnalyzer:
         stats = {}
 
         for snapshot_type in ['inventory', 'orders', 'reviews']:
-            current_data = get_snapshots(snapshot_type, current_start, current_end)
-            previous_data = get_snapshots(snapshot_type, previous_start, previous_end)
+            current_data, _, _ = get_snapshots(snapshot_type, current_start, current_end)
+            previous_data, _, _ = get_snapshots(snapshot_type, previous_start, previous_end)
 
             current_metrics = self._aggregate_metrics(current_data)
             previous_metrics = self._aggregate_metrics(previous_data)
@@ -362,13 +374,26 @@ class HistoricalDataAnalyzer:
 
         values = []
         for snapshot in snapshots:
-            data = snapshot.get('data', {})
-            for key, value in data.items():
-                if isinstance(value, (int, float)):
-                    values.append(float(value))
-                    if key not in metrics:
-                        metrics[key] = 0.0
-                    metrics[key] += float(value)
+            if isinstance(snapshot, dict):
+                data_raw = snapshot.get('data', {})
+                if isinstance(data_raw, str):
+                    try:
+                        import json
+                        data = json.loads(data_raw)
+                    except (json.JSONDecodeError, ValueError):
+                        data = {}
+                elif isinstance(data_raw, dict):
+                    data = data_raw
+                else:
+                    data = {}
+                for key, value in data.items():
+                    if isinstance(value, (int, float)):
+                        values.append(float(value))
+                        if key not in metrics:
+                            metrics[key] = 0.0
+                        metrics[key] += float(value)
+            elif isinstance(snapshot, (int, float)):
+                values.append(float(snapshot))
 
         if values:
             metrics['total_value'] = sum(values)
@@ -453,14 +478,14 @@ class HistoricalDataAnalyzer:
                     current_stock = product.get('current_stock', 0)
                     break
 
-        order_snapshots = get_snapshots('orders',
+        order_snapshots, _, _ = get_snapshots('orders',
             start_date=(datetime.now() - timedelta(days=30)).date().isoformat(),
             end_date=datetime.now().date().isoformat()
         )
 
         total_orders = 0
         for snapshot in order_snapshots:
-            snapshot_data = snapshot.get('data', {})
+            snapshot_data = self._get_snapshot_data(snapshot)
             total_orders += snapshot_data.get('order_count',
                            snapshot_data.get('total_orders', 0))
 
@@ -588,7 +613,7 @@ class HistoricalDataAnalyzer:
         Returns:
             Dictionary with health score and breakdown
         """
-        snapshots = get_snapshots('inventory',
+        snapshots, _, _ = get_snapshots('inventory',
             start_date=(datetime.now() - timedelta(days=30)).date().isoformat(),
             end_date=datetime.now().date().isoformat()
         )
@@ -677,14 +702,14 @@ class HistoricalDataAnalyzer:
         """
         risk_products = []
 
-        order_snapshots = get_snapshots('orders',
+        order_snapshots, _, _ = get_snapshots('orders',
             start_date=(datetime.now() - timedelta(days=30)).date().isoformat(),
             end_date=datetime.now().date().isoformat()
         )
 
         total_orders = 0
         for snapshot in order_snapshots:
-            snapshot_data = snapshot.get('data', {})
+            snapshot_data = self._get_snapshot_data(snapshot)
             total_orders += snapshot_data.get('order_count',
                            snapshot_data.get('total_orders', 0))
 
@@ -786,7 +811,7 @@ class CompetitorAnalyzer:
         Returns:
             List of PriceChangeEvent objects
         """
-        snapshots = get_snapshots('competitors',
+        snapshots, _, _ = get_snapshots('competitors',
             start_date=(datetime.now() - timedelta(days=days)).date().isoformat(),
             end_date=datetime.now().date().isoformat()
         )
@@ -798,7 +823,7 @@ class CompetitorAnalyzer:
         prev_price = None
 
         for snapshot in sorted(snapshots, key=lambda x: x['snapshot_date']):
-            data = snapshot.get('data', {})
+            data = self._get_snapshot_data(snapshot)
             competitors = data.get('competitors', [])
 
             for comp in competitors:
@@ -1157,7 +1182,7 @@ class CompetitorAnalyzer:
         Returns:
             Dictionary with market share shift analysis
         """
-        snapshots = get_snapshots('competitors',
+        snapshots, _, _ = get_snapshots('competitors',
             start_date=(datetime.now() - timedelta(days=days)).date().isoformat(),
             end_date=datetime.now().date().isoformat()
         )
@@ -1173,7 +1198,7 @@ class CompetitorAnalyzer:
 
         historical_prices = {}
         for snapshot in snapshots:
-            data = snapshot.get('data', {})
+            data = self._get_snapshot_data(snapshot)
             comps = data.get('competitors', [])
             for comp in comps:
                 asin_key = comp.get('asin', '')
